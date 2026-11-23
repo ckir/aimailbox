@@ -132,7 +132,8 @@ test.concurrent(
 			"--no-verify",
 			"--allow-empty",
 			"-m",
-			`deploy with ${fakeToken()}`,
+			// In the body, not the subject line: the whole message is scanned.
+			`deploy the service\n\nUploads use ${fakeToken()} for now.`,
 		]);
 		await bury(repo);
 		const result = await run(repo, ["just", "secrets"]);
@@ -164,6 +165,103 @@ test.concurrent(
 		]);
 		const parents = await must(repo, ["git", "log", "-1", "--format=%P"]);
 		expect(parents.output.trim().split(" ")).toHaveLength(2);
+		await bury(repo);
+
+		const result = await run(repo, ["just", "secrets"]);
+		expect(result.output).toContain(LEAK);
+		expect(result.exitCode).not.toBe(0);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"just secrets fails on a secret added and removed on a merged side branch",
+	async () => {
+		// The secret never appears in a first-parent commit of main or in the
+		// merged result, only in the side branch's own history.
+		const repo = await makeRepo();
+		await must(repo, ["git", "switch", "--quiet", "--create", "side"]);
+		writeFileSync(join(repo, "src/leak.ts"), secretLine());
+		await commitAll(repo, "side: add a file");
+		rmSync(join(repo, "src/leak.ts"));
+		await commitAll(repo, "side: remove the file");
+		await must(repo, ["git", "switch", "--quiet", "main"]);
+		writeFileSync(join(repo, "main.txt"), "main\n");
+		await commitAll(repo, "main change");
+		await must(repo, [
+			"git",
+			"merge",
+			"--quiet",
+			"--no-ff",
+			"--no-verify",
+			"-m",
+			"merge side",
+			"side",
+		]);
+		await bury(repo);
+
+		const result = await run(repo, ["just", "secrets"]);
+		expect(result.output).toContain(LEAK);
+		expect(result.exitCode).not.toBe(0);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"just secrets fails on a secret in a commit message on a merged side branch",
+	async () => {
+		const repo = await makeRepo();
+		await must(repo, ["git", "switch", "--quiet", "--create", "side"]);
+		writeFileSync(join(repo, "side.txt"), "side\n");
+		await must(repo, ["git", "add", "--all"]);
+		await must(repo, [
+			"git",
+			"commit",
+			"--quiet",
+			"--no-verify",
+			"-m",
+			`side change\n\nTested with ${fakeToken()}.`,
+		]);
+		await must(repo, ["git", "switch", "--quiet", "main"]);
+		writeFileSync(join(repo, "main.txt"), "main\n");
+		await commitAll(repo, "main change");
+		await must(repo, [
+			"git",
+			"merge",
+			"--quiet",
+			"--no-ff",
+			"--no-verify",
+			"-m",
+			"merge side",
+			"side",
+		]);
+		await bury(repo);
+
+		const result = await run(repo, ["just", "secrets"]);
+		expect(result.output).toContain(LEAK);
+		expect(result.exitCode).not.toBe(0);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"just secrets fails on a secret in the first commit of the repository",
+	async () => {
+		const repo = await makeRepo();
+		writeFileSync(join(repo, "src/leak.ts"), secretLine());
+		await must(repo, ["git", "add", "--all"]);
+		await must(repo, [
+			"git",
+			"commit",
+			"--quiet",
+			"--no-verify",
+			"--amend",
+			"--no-edit",
+		]);
+		const count = await must(repo, ["git", "rev-list", "--count", "HEAD"]);
+		expect(count.output.trim()).toBe("1");
+		rmSync(join(repo, "src/leak.ts"));
+		await commitAll(repo, "remove the file");
 		await bury(repo);
 
 		const result = await run(repo, ["just", "secrets"]);
