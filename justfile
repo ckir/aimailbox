@@ -1,5 +1,9 @@
 # Project tasks. Run `just` to list them.
 
+# Run recipe lines with bash in strict mode. `pipefail` matters for `secrets`:
+# without it a failing `git log` piped into gitleaks would be reported as clean.
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
 # List available recipes
 default:
     @just --list
