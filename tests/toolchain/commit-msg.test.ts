@@ -115,8 +115,18 @@ test.concurrent(
 		const message = join(repo, ".git/COMMIT_EDITMSG");
 		writeFileSync(message, CLEAN);
 		const result = await run(repo, [hook, message]);
-		expect(result.output).toContain("HOOK_ARG_1 is not set");
+		expect(result.output).toContain("rc.sh is missing");
 		expect(result.exitCode).not.toBe(0);
+
+		// lefthook skips a missing rc file without complaint, so a value already
+		// in the environment would otherwise be scanned in place of the message.
+		writeFileSync(message, leaky());
+		const spoofed = await run(repo, [hook, message], {
+			...cleanEnv(),
+			HOOK_ARG_1: "/dev/null",
+		});
+		expect(spoofed.output).toContain("rc.sh is missing");
+		expect(spoofed.exitCode).not.toBe(0);
 	},
 	SLOW,
 );

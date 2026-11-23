@@ -60,7 +60,11 @@ secrets-staged:
 # The path arrives in HOOK_ARG_1, exported by .lefthook/rc.sh, never as text
 # pasted into a command: a path containing shell syntax is then not run.
 # Without it there is nothing to scan, so the recipe fails rather than passes.
+# It also fails when rc.sh is missing: lefthook skips a missing rc file
+# silently, and HOOK_ARG_1 could then be a stale value from the caller's
+# environment rather than the file git is about to commit.
 secrets-message:
+    @test -f .lefthook/rc.sh || { echo "secrets-message: .lefthook/rc.sh is missing, so the message file cannot be identified" >&2; exit 1; }
     @test -n "${HOOK_ARG_1:-}" || { echo "secrets-message: HOOK_ARG_1 is not set; this recipe runs from the commit-msg hook" >&2; exit 1; }
     gitleaks stdin --no-banner --redact < "$HOOK_ARG_1"
 
