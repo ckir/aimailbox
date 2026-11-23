@@ -11,7 +11,9 @@ setup:
     lefthook install
 
 # Type-check with tsc (Bun does not type-check when it runs code).
-# `bun run --bun` uses only the locally installed binary and runs it on Bun, not Node.
+# `bun run --bun` runs the installed binary on Bun, not Node, and unlike `bunx` never
+# downloads a missing package. Run `just setup` first: without node_modules it falls
+# back to a `tsc` or `biome` found on PATH.
 typecheck:
     bun run --bun tsc --noEmit
 
@@ -27,14 +29,16 @@ fmt:
 test:
     bun test
 
-# Scan for secrets: staged changes, then the full git history, then unstaged
-# changes to tracked files. Untracked files are scanned once they are staged.
-# `-m` makes git show merge commits as patches; without it, content added in a
-# merge commit is never scanned. Stashes are excluded: they are local merge
-# commits that are never pushed. The diff filter skips deletions and unmerged,
-# unknown and broken entries.
+# Scan for secrets: staged changes, the history of the current commit (patches,
+# then commit messages), and unstaged changes to tracked files. Untracked files
+# are scanned once they are staged. Only the current commit's history is
+# scanned, not other branches or stashes, so the result describes what is
+# checked out. `-m` makes git show merge commits as patches; without it,
+# content added in a merge commit is never scanned. The diff filter skips
+# deletions and unmerged, unknown and broken entries.
 secrets: secrets-staged
-    gitleaks git --log-opts="--exclude=refs/stash --all --full-history -m --diff-filter=uxdb" --no-banner --redact .
+    gitleaks git --log-opts="--full-history -m --diff-filter=uxdb" --no-banner --redact .
+    git log --full-history --format=%B | gitleaks stdin --no-banner --redact
     gitleaks git --pre-commit --no-banner --redact .
 
 # Scan only staged changes for secrets (used by the pre-commit hook)

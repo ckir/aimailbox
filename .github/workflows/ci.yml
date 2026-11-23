@@ -4,11 +4,16 @@ on:
   push:
     branches: [main]
   pull_request:
+    # `edited` reruns the check when a pull request's base branch is changed.
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
 
+# Tool versions are pinned so a new release cannot break an unchanged commit.
 env:
+  BUN_VERSION: 1.4.4
+  JUST_VERSION: 1.58.0
   GITLEAKS_VERSION: 8.30.1
 
 jobs:
@@ -17,12 +22,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history so gitleaks can scan every commit.
+          # Full history so gitleaks can scan every commit reachable from the checkout.
           fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
 
       - uses: extractions/setup-just@v4
+        with:
+          just-version: ${{ env.JUST_VERSION }}
 
       - name: Install gitleaks
         run: |

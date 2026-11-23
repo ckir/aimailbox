@@ -39,7 +39,7 @@ Use [Biome](https://biomejs.dev) for linting and formatting, not ESLint or Prett
 
 Use [gitleaks](https://github.com/gitleaks/gitleaks) to keep secrets out of this public repo.
 
-- `just secrets` scans the full history (including merge commits) plus staged and unstaged changes to tracked files; the pre-commit hook scans staged changes.
+- `just secrets` scans the history of the current commit (patches, merge commits and commit messages) plus staged and unstaged changes to tracked files; the pre-commit hook scans staged changes. Other branches and stashes are not scanned.
 - gitleaks is a standalone binary, not a dev dependency. Install it before committing: the hook fails if it is missing.
 
 ## Checks and CI
