@@ -11,6 +11,7 @@ commit is the one that was reviewed and confirmed.
 | 2026-11-23 | 8248cb5..b7020c6 (second-audit tests)                                    | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit b7020c6; docs-only follow-up 9e22619. Round 2 found no defect in the test code.                           |
 | 2026-11-23 | f78d7d8..4034060 (CODEOWNERS, SHA pins, commit-msg hook, local lefthook) | 4      | ALIGNED, GREEN confirmed by the owner | Fold commits 4f31e38, f3b6a52, 4034060 on top of 8dda991. Rounds 3 and 4 were clean.                                  |
 | 2026-11-23 | cd68f70..eb72824 (message-file check, wider CODEOWNERS)                  | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit eb72824 on top of f8e716f; comment-only follow-up c506136. Round 2 found no runtime defect.               |
+| 2026-11-23 | eb72824..2864a53 (third-audit tests)                                     | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit 2864a53 on top of 4ef8467 and bd49af6. Round 2 was clean.                                                 |
 
 ## Notes for the 2026-11-23 review
 
@@ -74,3 +75,18 @@ commit is the one that was reviewed and confirmed.
   developer's own shell can defeat the local commit-msg check; CI is unaffected.
 - Not added: `package.json`, `bun.lock`, `biome.json` and `tsconfig.json` are outside
   CODEOWNERS; the owner chose the list of owned paths.
+
+## Notes for the review of the third-audit tests (eb72824..2864a53)
+
+- Findings: 4 in round 1, all reproduced and fixed in 2864a53 (test code only): the
+  CODEOWNERS matcher did not let `**/` match zero directories; a workflow-level or job-level
+  default shell, `set +o errexit` and `set +xe`, and a job `container` or `services` image
+  were not checked. Nine mutants go red. Round 2 found nothing.
+- Not covered by the clean round: round 2 was narrowed to 2864a53; not tested on macOS or
+  Windows.
+- Discarded below the floor: `set -x +e` would pass the script check (no CI script uses
+  `set`); the matcher treats `/dir/*` as covering nested files, which only makes the test
+  stricter than GitHub.
+- Known: the commit message of 4ef8467 said the job had no custom shell when only the steps
+  were checked; 2864a53 closes it. The check that no CI script contains `||` is deliberately
+  blunt and fails closed.
