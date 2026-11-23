@@ -1,10 +1,15 @@
 # Git hooks. Install with `just setup` (or `lefthook install`).
 
+# Fail the git operation, rather than silently skipping the hooks, when the
+# lefthook binary cannot be found.
+assert_lefthook_installed: true
+
 pre-commit:
   jobs:
+    # No glob: Biome decides which staged files it handles and ignores the rest,
+    # so the hook covers exactly what `just lint` covers.
     - name: biome
-      glob: "*.{js,jsx,ts,tsx,json,jsonc,css,md}"
-      run: bun run --bun biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      run: bun run --bun biome check --write --no-errors-on-unmatched --files-ignore-unknown=true -- {staged_files}
       stage_fixed: true
 
     - name: typecheck
@@ -15,5 +20,12 @@ pre-commit:
 
 pre-push:
   jobs:
+    # A script, not `run`: lefthook skips a pre-push `run` job when the push
+    # changes no existing files (deletion-only pushes, tags, empty commits).
+    # Script jobs are not skipped. The script is .lefthook/pre-push/check.sh.
     - name: check
-      run: just check
+      script: check.sh
+      runner: sh
+      # Explicit args replace the remote name and URL that git passes to the
+      # hook, which lefthook would otherwise append to the shell command unquoted.
+      args: "--"

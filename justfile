@@ -4,8 +4,9 @@
 default:
     @just --list
 
-# Install dependencies and git hooks
+# Install dependencies and git hooks (needs bun, lefthook and gitleaks on PATH; see README)
 setup:
+    @for tool in bun lefthook gitleaks; do command -v "$tool" >/dev/null || { echo "$tool is not installed; see README.md (Development)" >&2; exit 1; }; done
     bun install
     lefthook install
 
@@ -26,9 +27,14 @@ fmt:
 test:
     bun test
 
-# Scan the whole git history for secrets
-secrets:
-    gitleaks git --no-banner --redact .
+# Scan for secrets: staged changes, then the full git history, then unstaged
+# changes to tracked files. Untracked files are scanned once they are staged.
+# `-m` makes git show merge commits as patches; without it, content added in a
+# merge commit is never scanned. The diff filter skips deletions and unmerged,
+# unknown and broken entries.
+secrets: secrets-staged
+    gitleaks git --log-opts="--all --full-history -m --diff-filter=uxdb" --no-banner --redact .
+    gitleaks git --pre-commit --no-banner --redact .
 
 # Scan only staged changes for secrets (used by the pre-commit hook)
 secrets-staged:
