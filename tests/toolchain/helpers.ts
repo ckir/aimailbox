@@ -70,7 +70,15 @@ test("fixture", () => {
  * Environment variables that change what the tools under test do. They are
  * dropped so that a developer's shell settings cannot alter the result.
  */
-const DROPPED_PREFIXES = ["GIT_", "LEFTHOOK", "GITLEAKS_", "BIOME_", "JUST_"];
+const DROPPED_PREFIXES = [
+	"GIT_",
+	"LEFTHOOK",
+	"GITLEAKS_",
+	"BIOME_",
+	"JUST_",
+	// Exported by .lefthook/rc.sh in the hook this suite may be running under.
+	"HOOK_ARG_",
+];
 const DROPPED_NAMES = new Set(["BASH_ENV", "ENV"]);
 
 const created: string[] = [];

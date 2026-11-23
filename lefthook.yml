@@ -5,8 +5,14 @@
 # a problem. CI (.github/workflows/ci.yml) is authoritative.
 
 # Run the lefthook pinned in package.json, never one that happens to be on
-# PATH. Without this the generated hooks try `lefthook` on PATH first.
-lefthook: bun run --bun lefthook
+# PATH. Without this the generated hooks try `lefthook` on PATH first. The
+# path is spelled out because `bun run lefthook` falls back to PATH when
+# node_modules is missing; this form fails instead.
+lefthook: bun ./node_modules/.bin/lefthook
+
+# Sourced by each generated hook before lefthook starts. It exports git's
+# hook argument as HOOK_ARG_1; see the file for why.
+rc: .lefthook/rc.sh
 
 # Fail the git operation, rather than silently skipping the hooks, when the
 # lefthook binary cannot be found.
@@ -29,12 +35,11 @@ pre-commit:
 commit-msg:
   jobs:
     # The message is scanned before the commit exists, so a secret typed into
-    # it never enters the history. `{1}` is the path of the message file.
-    # lefthook pastes it into a shell command as it is, so it is single-quoted:
-    # inside single quotes the shell expands nothing. A path that itself
-    # contains a single quote makes this job fail rather than pass.
+    # it never enters the history. The message file's path is not passed here:
+    # lefthook would paste `{1}` into a shell command unescaped. The recipe
+    # reads it from HOOK_ARG_1, which .lefthook/rc.sh exports.
     - name: secrets
-      run: just secrets-message '{1}'
+      run: just secrets-message
 
 pre-push:
   jobs:

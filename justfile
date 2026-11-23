@@ -56,11 +56,13 @@ secrets: secrets-staged
 secrets-staged:
     gitleaks git --staged --no-banner --redact .
 
-# Scan a commit message file for secrets (used by the commit-msg hook).
-# `$file` makes just pass the path as an environment variable instead of
-# pasting it into the command, so a path containing shell syntax is not run.
-secrets-message $file:
-    gitleaks stdin --no-banner --redact < "$file"
+# Scan the commit message file for secrets (used by the commit-msg hook).
+# The path arrives in HOOK_ARG_1, exported by .lefthook/rc.sh, never as text
+# pasted into a command: a path containing shell syntax is then not run.
+# Without it there is nothing to scan, so the recipe fails rather than passes.
+secrets-message:
+    @test -n "${HOOK_ARG_1:-}" || { echo "secrets-message: HOOK_ARG_1 is not set; this recipe runs from the commit-msg hook" >&2; exit 1; }
+    gitleaks stdin --no-banner --redact < "$HOOK_ARG_1"
 
 # The fast gate: what the pre-push hook always runs
 check-fast: typecheck lint test secrets

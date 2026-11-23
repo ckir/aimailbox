@@ -24,9 +24,9 @@ Use [lefthook](https://lefthook.dev) for git hooks, not husky, pre-commit or han
 - Configure hooks in the root `lefthook.yml`; `just setup` installs them.
 - Hooks should call `just` recipes where one exists, so checks run the same way locally and in hooks.
 - Three hooks are installed: pre-commit, commit-msg and pre-push.
-- `lefthook.yml` sets `lefthook: bun run --bun lefthook`, so the installed hooks always run the copy pinned in `package.json`, never a `lefthook` that happens to be on `PATH`. A clone or worktree without `node_modules` cannot commit or push until `bun install` has run there.
+- `lefthook.yml` sets `lefthook: bun ./node_modules/.bin/lefthook`, so the installed hooks run the copy pinned in `package.json` and never a `lefthook` on `PATH`. A clone or worktree without `node_modules`, or a git client whose `PATH` has no `bun`, cannot commit or push until that is fixed: the hooks fail rather than skip.
+- The commit-msg hook gets the message file's path through the environment variable `HOOK_ARG_1`, exported by `.lefthook/rc.sh`, not as a command argument. lefthook pastes hook arguments into shell commands unescaped, so a path with shell syntax in it would be run: do not use `{0}`, `{1}` and so on in `lefthook.yml`. `just secrets-message` only works from the installed hook.
 - `bun install` also installs the hooks, because Bun trusts the `lefthook` package's install script by default (it does nothing when `CI=true`). `just setup` still runs the install explicitly.
-- Known limit: in a linked git worktree whose path contains a single quote (`'`), the commit-msg hook fails and blocks the commit. Use a path without one.
 
 ## Type checking
 
