@@ -33,6 +33,6 @@ Remove an entry when it is closed.
   `TOOLCHAIN_FILES` and the hook's glob.** Compensation: documented in `CLAUDE.md`, section
   Tests (owner, 2026-11-23). Anchor: `tests/toolchain/helpers.ts`, `TOOLCHAIN_FILES`.
 - **The CI workflow is checked by reading it, not by running it.** Compensation: it runs on
-  every pull request. Anchor: `tests/toolchain/ci.test.ts`.
+  every pull request. Anchor: `tests/gate/ci.test.ts`.
 - **`src/index.ts` and `src/index.test.ts` are placeholders** with one trivial test.
   Compensation: none needed until product code exists (owner, 2026-11-23).
