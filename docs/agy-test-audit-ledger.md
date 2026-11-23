@@ -10,7 +10,7 @@ Conventions: the newest row goes at the bottom, and a `|` inside a cell is writt
 | Date       | Range                                                                     | Rounds | Verdict                | Evidence                                                                                                               |
 | ---------- | ------------------------------------------------------------------------- | ------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | 2026-11-23 | 1832d1e..ea937b3 (toolchain scaffold and its tests)                       | 2      | GAPS FOUND, all closed | Fold commits 8becf24, ab9abf0, ea937b3. Briefs: .clavity/seams/toolchain-scaffold-test-audit.md and -test-audit-r2.md. |
-| 2026-11-23 | ea937b3..4ef8467 (CODEOWNERS, SHA pins, commit-msg hook, pinned lefthook) | 1      | GAPS FOUND, all closed | Fold commit 4ef8467. Brief: .clavity/seams/toolchain-scaffold-test-audit-r3.md.                                        |
+| 2026-11-23 | ea937b3..bd49af6 (CODEOWNERS, SHA pins, commit-msg hook, pinned lefthook) | 1      | GAPS FOUND, all closed | Fold commits 4ef8467, bd49af6. Brief: .clavity/seams/toolchain-scaffold-test-audit-r3.md.                              |
 
 ## Notes for the 2026-11-23 audit
 
@@ -30,7 +30,7 @@ Conventions: the newest row goes at the bottom, and a `|` inside a cell is writt
   GitHub Actions themselves. The audit raises the floor; it does not prove no gap remains.
 - Accepted boundaries are listed in `docs/accepted-boundaries.md`.
 
-## Notes for the third audit (ea937b3..4ef8467)
+## Notes for the third audit (ea937b3..bd49af6)
 
 - Gaps: 8, each confirmed by applying the change and seeing every committed test stay green;
   the owner scoped all eight. Closed with test code only: `bun install` in `just setup`; a
@@ -38,8 +38,12 @@ Conventions: the newest row goes at the bottom, and a `|` inside a cell is writt
   and a swallowed failure in the CI workflow; the resolved-directory comparison in
   `secrets-message`; the exact lefthook pin; the commit-msg scan on `git merge`. Ten mutants
   go red, each on the new test written for it.
+- Two more, named in the peer's full analysis and scoped in by the owner (bd49af6): a tracked
+  `lefthook-local.yml` (measured: `commit-msg: skip: true` there turns the scan off) and a
+  second workflow file outside the checks on `ci.yml`. Three more mutants go red.
 - Discarded below the floor: removing `--redact` from `secrets-message` (gitleaks does not
-  print the secret without `-v`); removing `bun` from the `setup` tool guard (the next line
-  fails anyway).
+  print the secret without `-v`, measured); removing `bun` from the `setup` tool guard (the next line
+  fails anyway); removing `--` from `cd --` (only matters for a git directory whose relative
+  path starts with a hyphen).
 - Not examined: Windows and macOS; the audit was one round and was not re-run on the new
   tests. The audit raises the floor; it does not prove no gap remains.
