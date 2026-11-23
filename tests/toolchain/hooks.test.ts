@@ -6,11 +6,9 @@
 import { afterAll, expect, test } from "bun:test";
 import {
 	chmodSync,
-	copyFileSync,
 	existsSync,
 	mkdirSync,
 	readFileSync,
-	rmSync,
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -117,26 +115,25 @@ test.concurrent(
 test.concurrent(
 	"an installed hook blocks the push when lefthook cannot be found",
 	async () => {
-		// `lefthook install` writes the path of the binary that ran it into the
-		// hook as a fallback. Install from a private copy and then delete it, so
-		// that neither that path nor PATH leads to lefthook.
+		// `lefthook install` writes the absolute path of the binary that ran it
+		// into the hook as a fallback, so hiding lefthook from PATH is not enough.
+		// Point that fallback at a path that does not exist, which is what the
+		// hook sees after lefthook has been uninstalled or moved.
 		const repo = await makeRepo();
-		const lefthook = Bun.which("lefthook");
-		if (lefthook === null) throw new Error("lefthook is not on PATH");
-		const copy = join(makeDir(), "lefthook");
-		copyFileSync(lefthook, copy);
-		chmodSync(copy, 0o755);
-		await must(repo, [copy, "install"]);
-		rmSync(copy);
+		await must(repo, ["lefthook", "install"]);
+		const hookPath = join(repo, ".git/hooks/pre-push");
+		const original = readFileSync(hookPath, "utf8");
+		const embedded = /(?<=\s)\/\S*lefthook(?=\s)/g;
+		expect(original).toMatch(embedded);
+		writeFileSync(
+			hookPath,
+			original.replace(embedded, "/nonexistent/lefthook"),
+		);
 
 		const path = binDirWith(["sh", "git", "uname", "tr", "sed"]);
 		const result = await run(
 			repo,
-			[
-				join(repo, ".git/hooks/pre-push"),
-				"origin",
-				"https://example.invalid/repo",
-			],
+			[hookPath, "origin", "https://example.invalid/repo"],
 			cleanEnv({ PATH: path }),
 		);
 		expect(result.output).toContain("Can't find lefthook in PATH");
@@ -214,14 +211,22 @@ test.concurrent(
 );
 
 test.concurrent(
-	"just setup names a missing tool instead of failing later",
+	"just setup names a missing tool and installs nothing",
 	async () => {
-		const repo = await makeRepo();
-		// Everything `setup` needs except gitleaks.
-		const path = binDirWith(["bash", "just", "bun", "lefthook", "git"]);
+		// PATH holds everything `setup` needs except gitleaks. `bun` and
+		// `lefthook` are stand-ins that only record that they ran, so that a
+		// broken guard cannot start a real install from inside this test.
+		const repo = await makeRepo({ linkNodeModules: false });
+		const path = binDirWith(["bash", "just", "git"]);
+		const ran = join(repo, "INSTALLER-RAN");
+		for (const name of ["bun", "lefthook"]) {
+			writeFileSync(join(path, name), `#!/bin/sh\necho ${name} >> "${ran}"\n`);
+			chmodSync(join(path, name), 0o755);
+		}
 		const result = await run(repo, ["just", "setup"], cleanEnv({ PATH: path }));
 		expect(result.output).toContain("gitleaks is not installed");
 		expect(result.exitCode).toBe(1);
+		expect(existsSync(ran)).toBe(false);
 	},
 	SLOW,
 );
