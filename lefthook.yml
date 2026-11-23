@@ -4,6 +4,10 @@
 # tree rather than the exact commit, so uncommitted or unstaged files can mask
 # a problem. CI (.github/workflows/ci.yml) is authoritative.
 
+# Run the lefthook pinned in package.json, never one that happens to be on
+# PATH. Without this the generated hooks try `lefthook` on PATH first.
+lefthook: bun run --bun lefthook
+
 # Fail the git operation, rather than silently skipping the hooks, when the
 # lefthook binary cannot be found.
 assert_lefthook_installed: true
@@ -26,8 +30,11 @@ commit-msg:
   jobs:
     # The message is scanned before the commit exists, so a secret typed into
     # it never enters the history. `{1}` is the path of the message file.
+    # lefthook pastes it into a shell command as it is, so it is single-quoted:
+    # inside single quotes the shell expands nothing. A path that itself
+    # contains a single quote makes this job fail rather than pass.
     - name: secrets
-      run: just secrets-message "{1}"
+      run: just secrets-message '{1}'
 
 pre-push:
   jobs:

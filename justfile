@@ -56,9 +56,11 @@ secrets: secrets-staged
 secrets-staged:
     gitleaks git --staged --no-banner --redact .
 
-# Scan a commit message file for secrets (used by the commit-msg hook)
-secrets-message file:
-    gitleaks stdin --no-banner --redact < "{{file}}"
+# Scan a commit message file for secrets (used by the commit-msg hook).
+# `$file` makes just pass the path as an environment variable instead of
+# pasting it into the command, so a path containing shell syntax is not run.
+secrets-message $file:
+    gitleaks stdin --no-banner --redact < "$file"
 
 # The fast gate: what the pre-push hook always runs
 check-fast: typecheck lint test secrets

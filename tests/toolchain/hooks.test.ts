@@ -163,42 +163,40 @@ test.concurrent(
 );
 
 test.concurrent(
-	"an installed hook blocks the push when lefthook cannot be found",
+	"an installed hook blocks the push when the project's lefthook is missing",
 	async () => {
-		// `lefthook install` writes the absolute path of the binary that ran it
-		// into the hook as a fallback, so hiding lefthook from PATH is not enough.
-		// Point that fallback at a path that does not exist, which is what the
-		// hook sees after lefthook has been uninstalled or moved. The hook also
-		// looks in the repository's own node_modules, so this one has none.
+		// The generated hook runs `bun run --bun lefthook`, the copy pinned in
+		// package.json. With no node_modules there is nothing for it to run, and
+		// the push must be refused rather than waved through.
 		const repo = await makeRepo({ linkNodeModules: false });
 		await must(repo, [LEFTHOOK, "install"]);
-		const hookPath = join(repo, ".git/hooks/pre-push");
-		const original = readFileSync(hookPath, "utf8");
-		// The fallback is the branch right after the plain `lefthook` one. Its
-		// command is taken as written (it may be quoted, and the file may not be
-		// named `lefthook`) rather than guessed with a path pattern.
-		const fallback = original.match(
-			/elif lefthook -h >\/dev\/null 2>&1\s+then\s+lefthook "\$@"\s+elif (.+) -h >\/dev\/null 2>&1/,
-		);
-		if (fallback?.[1] === undefined) {
-			throw new Error(
-				`no embedded lefthook path in the generated hook:\n${original}`,
-			);
-		}
-		writeFileSync(
-			hookPath,
-			original.replaceAll(fallback[1], "/nonexistent/lefthook"),
-		);
+		const result = await run(repo, [
+			join(repo, ".git/hooks/pre-push"),
+			"origin",
+			"https://example.invalid/repo",
+		]);
+		expect(result.exitCode).not.toBe(0);
+	},
+	SLOW,
+);
 
-		const path = binDirWith(["sh", "git", "uname", "tr", "sed"]);
-		const result = await run(
-			repo,
-			[hookPath, "origin", "https://example.invalid/repo"],
-			cleanEnv({ PATH: path }),
-		);
-		expect(result.output).toContain("Can't find lefthook in PATH");
-		expect(result.output).toContain("Operation is aborted");
-		expect(result.exitCode).toBe(1);
+test.concurrent(
+	"installed hooks call the lefthook pinned in package.json",
+	async () => {
+		// Without the `lefthook:` setting the generated hook tries a `lefthook`
+		// on PATH first, which may be any version.
+		const repo = await makeRepo();
+		await must(repo, [LEFTHOOK, "install"]);
+		for (const hook of ["pre-commit", "commit-msg", "pre-push"]) {
+			const script = readFileSync(join(repo, ".git/hooks", hook), "utf8");
+			const pinned = script.indexOf("bun run --bun lefthook");
+			const onPath = script.indexOf("elif lefthook -h");
+			expect({ hook, pinned: pinned > 0 }).toEqual({ hook, pinned: true });
+			expect({ hook, pinnedFirst: pinned < onPath }).toEqual({
+				hook,
+				pinnedFirst: true,
+			});
+		}
 	},
 	SLOW,
 );
@@ -312,6 +310,48 @@ test.concurrent(
 		const result = await run(repo, [LEFTHOOK, "run", "commit-msg", message]);
 		expect(result.output).toContain(LEAK);
 		expect(result.exitCode).not.toBe(0);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"commit-msg does not run shell syntax in the message file's path",
+	async () => {
+		// In a linked worktree git passes the absolute path of the message file,
+		// so the directory names are whatever the user chose.
+		const repo = await makeRepo();
+		const dir = join(repo, 'odd $(touch INJECTED-A) `touch INJECTED-B` " dir');
+		mkdirSync(dir);
+
+		const clean = join(dir, "CLEAN_MSG");
+		writeFileSync(clean, "deploy the service\n");
+		const passed = await run(repo, [LEFTHOOK, "run", "commit-msg", clean]);
+		expect(passed.exitCode).toBe(0);
+
+		const leaky = join(dir, "LEAKY_MSG");
+		writeFileSync(leaky, `deploy with ${fakeToken()}\n`);
+		const blocked = await run(repo, [LEFTHOOK, "run", "commit-msg", leaky]);
+		expect(blocked.output).toContain(LEAK);
+		expect(blocked.exitCode).not.toBe(0);
+
+		expect(existsSync(join(repo, "INJECTED-A"))).toBe(false);
+		expect(existsSync(join(repo, "INJECTED-B"))).toBe(false);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"just secrets-message does not run shell syntax in its argument",
+	async () => {
+		const repo = await makeRepo();
+		const dir = join(repo, 'odd $(touch INJECTED-A) `touch INJECTED-B` " dir');
+		mkdirSync(dir);
+		const message = join(dir, "MSG");
+		writeFileSync(message, "deploy the service\n");
+		const result = await run(repo, ["just", "secrets-message", message]);
+		expect(result.exitCode).toBe(0);
+		expect(existsSync(join(repo, "INJECTED-A"))).toBe(false);
+		expect(existsSync(join(repo, "INJECTED-B"))).toBe(false);
 	},
 	SLOW,
 );

@@ -96,6 +96,37 @@ test.concurrent(
 );
 
 test.concurrent(
+	"after just setup, git runs the pinned lefthook even when another is first on PATH",
+	async () => {
+		const repo = await makeRepo();
+		await setUp(repo);
+
+		// A stand-in `lefthook` ahead of everything else on PATH. If a hook ran
+		// it, it would leave a marker and let the commit through unchecked.
+		const bin = makeDir();
+		const marker = join(repo, "PATH-LEFTHOOK-RAN");
+		writeFileSync(
+			join(bin, "lefthook"),
+			`#!/bin/sh\necho ran >> "${marker}"\nexit 0\n`,
+		);
+		chmodSync(join(bin, "lefthook"), 0o755);
+		const env = cleanEnv({ PATH: `${bin}:${process.env.PATH ?? ""}` });
+
+		writeFileSync(join(repo, "src/bad.ts"), TYPE_ERROR);
+		await must(repo, ["git", "add", "src/bad.ts"]);
+		const blocked = await run(
+			repo,
+			["git", "commit", "-m", "add a type error"],
+			env,
+		);
+		expect(blocked.output).toContain("TS2322");
+		expect(blocked.exitCode).not.toBe(0);
+		expect(existsSync(marker)).toBe(false);
+	},
+	SLOW,
+);
+
+test.concurrent(
 	"after just setup, git push is blocked by a failing check and allowed without one",
 	async () => {
 		const repo = await makeRepo();
