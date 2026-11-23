@@ -229,9 +229,13 @@ test.concurrent(
 test.concurrent(
 	"commit-msg works when the caller has CDPATH set",
 	async () => {
-		// With CDPATH set, `cd` prints the directory it chose. The recipe captures
-		// the output of `cd ... && pwd`, so that extra line used to make every
-		// message file look as if it were outside the git directory.
+		// With CDPATH set, `cd` prints the directory it chose when given a
+		// relative path. The recipe captures the output of `cd ... && pwd`, so
+		// the git directory (which git reports as the relative `.git`) came back
+		// with an extra line while an absolute message path did not, and the two
+		// no longer matched. A relative message path hid the problem, because
+		// both sides then carried the same extra line: the absolute path below
+		// is what makes this test fail without the fix.
 		const { repo, hook } = await repoWithHook();
 		const env = { ...cleanEnv(), CDPATH: `.:${repo}` };
 		const message = join(repo, ".git/COMMIT_EDITMSG");
