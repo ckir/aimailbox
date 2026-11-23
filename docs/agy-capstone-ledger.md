@@ -12,6 +12,7 @@ commit is the one that was reviewed and confirmed.
 | 2026-11-23 | f78d7d8..4034060 (CODEOWNERS, SHA pins, commit-msg hook, local lefthook) | 4      | ALIGNED, GREEN confirmed by the owner | Fold commits 4f31e38, f3b6a52, 4034060 on top of 8dda991. Rounds 3 and 4 were clean.                                  |
 | 2026-11-23 | cd68f70..eb72824 (message-file check, wider CODEOWNERS)                  | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit eb72824 on top of f8e716f; comment-only follow-up c506136. Round 2 found no runtime defect.               |
 | 2026-11-23 | eb72824..2864a53 (third-audit tests)                                     | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit 2864a53 on top of 4ef8467 and bd49af6. Round 2 was clean.                                                 |
+| 2026-11-23 | 2864a53..e663346 (four more CODEOWNERS entries)                          | 0      | WAIVED by the owner, no review run    | Commit e663346: four CODEOWNERS lines and the matching test entries; removing any one entry fails two tests.          |
 
 ## Notes for the 2026-11-23 review
 
