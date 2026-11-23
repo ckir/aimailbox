@@ -1,7 +1,8 @@
 /**
- * Pins the CODEOWNERS entries that route changes to the CI workflow, and to
- * the tests guarding it, to the owner. Like the workflow tests, this reads a
- * file; whether GitHub enforces it depends on branch protection.
+ * Pins the CODEOWNERS entries that route changes to the CI workflow, the
+ * recipes and hooks, and the tests guarding them, to the owner. Like the
+ * workflow tests, this reads a file; whether GitHub enforces it depends on
+ * branch protection.
  */
 import { expect, test } from "bun:test";
 import { join, resolve } from "node:path";
@@ -21,12 +22,16 @@ async function entries(): Promise<Map<string, string[]>> {
 	return result;
 }
 
-test("the CI workflow, its tests and CODEOWNERS itself each have an owner", async () => {
+test("the CI workflow, the recipes, the hooks, their tests and CODEOWNERS each have an owner", async () => {
 	const owned = await entries();
 	for (const path of [
 		"/.github/workflows/",
 		"/.github/CODEOWNERS",
 		"/tests/gate/",
+		"/justfile",
+		"/lefthook.yml",
+		"/.lefthook/",
+		"/tests/toolchain/",
 	]) {
 		const owners = owned.get(path) ?? [];
 		expect({ path, hasOwner: owners.length > 0 }).toEqual({

@@ -7,7 +7,13 @@
  * script sources.
  */
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import {
 	cleanEnv,
@@ -15,6 +21,7 @@ import {
 	fakeToken,
 	LEAK,
 	LEFTHOOK,
+	makeDir,
 	makeRepo,
 	must,
 	run,
@@ -58,10 +65,12 @@ test.concurrent(
 	async () => {
 		// In a linked worktree git passes the absolute path of the message file,
 		// so its directory names are whatever the user chose. This one carries
-		// every way of breaking out of a quoted shell word.
+		// every way of breaking out of a quoted shell word. It sits inside .git,
+		// as a real message file does.
 		const { repo, hook } = await repoWithHook();
 		const dir = join(
 			repo,
+			".git",
 			// `$` + `{IFS}` is written in two parts only to keep the linter from
 			// reading it as a forgotten template placeholder.
 			`odd $(touch INJECTED-A) \`touch INJECTED-B\` " ';touch$` +
@@ -138,6 +147,81 @@ test.concurrent(
 		const result = await run(repo, ["just", "secrets-message"]);
 		expect(result.output).toContain("HOOK_ARG_1 is not set");
 		expect(result.exitCode).toBe(1);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"commit-msg refuses a path that is not a regular file, even with rc.sh emptied",
+	async () => {
+		// An rc.sh that exists but exports nothing leaves whatever the caller had
+		// in HOOK_ARG_1. /dev/null would scan clean; it is not a message file.
+		const { repo, hook } = await repoWithHook();
+		writeFileSync(join(repo, ".lefthook/rc.sh"), "# emptied\n");
+		const message = join(repo, ".git/COMMIT_EDITMSG");
+		writeFileSync(message, leaky());
+		const result = await run(repo, [hook, message], {
+			...cleanEnv(),
+			HOOK_ARG_1: "/dev/null",
+		});
+		expect(result.output).toContain("does not name a regular file");
+		expect(result.exitCode).not.toBe(0);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"just secrets-message refuses a file outside the git directory",
+	async () => {
+		// Git keeps every commit message file inside the git directory. A clean
+		// file anywhere else is not the message being committed.
+		const repo = await makeRepo();
+		mkdirSync(join(repo, "notes"));
+		const elsewhere = join(repo, "notes/clean.txt");
+		writeFileSync(elsewhere, CLEAN);
+		const result = await run(repo, ["just", "secrets-message"], {
+			...cleanEnv(),
+			HOOK_ARG_1: elsewhere,
+		});
+		expect(result.output).toContain("outside the git directory");
+		expect(result.exitCode).toBe(1);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"in a linked worktree, git commit is blocked by a secret in the message and allowed without one",
+	async () => {
+		// The worktree's message file lives under the main repository's
+		// .git/worktrees/, and git passes its absolute path to the hook.
+		const { repo } = await repoWithHook();
+		const worktree = join(makeDir(), "linked");
+		await must(repo, [
+			"git",
+			"worktree",
+			"add",
+			"--quiet",
+			"-b",
+			"linked",
+			worktree,
+		]);
+		symlinkSync(join(repo, "node_modules"), join(worktree, "node_modules"));
+
+		writeFileSync(join(worktree, "note.txt"), "a note\n");
+		await must(worktree, ["git", "add", "note.txt"]);
+		const blocked = await run(worktree, [
+			"git",
+			"commit",
+			"-m",
+			`add a note\n\nUploads use ${fakeToken()} for now.`,
+		]);
+		expect(blocked.output).toContain(LEAK);
+		expect(blocked.exitCode).not.toBe(0);
+
+		const allowed = await run(worktree, ["git", "commit", "-m", "add a note"]);
+		expect(allowed.exitCode).toBe(0);
+		const count = await must(worktree, ["git", "rev-list", "--count", "HEAD"]);
+		expect(count.output.trim()).toBe("2");
 	},
 	SLOW,
 );
