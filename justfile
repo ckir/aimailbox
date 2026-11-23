@@ -29,9 +29,15 @@ lint:
 fmt:
     bun run --bun biome check --write .
 
-# Run the test suite
+# Run every test except the toolchain suite, which is slow and only matters
+# when a tooling file changes
 test:
-    bun test
+    bun test --path-ignore-patterns='tests/toolchain/**'
+
+# Run the toolchain suite: proves each gate in this file, the hooks and the
+# config blocks what it should
+test-toolchain:
+    bun test tests/toolchain
 
 # Scan for secrets: staged changes, the history of the current commit (patches,
 # then commit messages), and unstaged changes to tracked files. Untracked files
@@ -49,5 +55,8 @@ secrets: secrets-staged
 secrets-staged:
     gitleaks git --staged --no-banner --redact .
 
-# Everything CI runs
-check: typecheck lint test secrets
+# The fast gate: what the pre-push hook always runs
+check-fast: typecheck lint test secrets
+
+# The full gate: everything CI runs
+check: check-fast test-toolchain

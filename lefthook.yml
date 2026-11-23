@@ -24,12 +24,30 @@ pre-commit:
 
 pre-push:
   jobs:
-    # A script, not `run`: lefthook skips a pre-push `run` job when the push
-    # changes no existing files (deletion-only pushes, tags, empty commits).
-    # Script jobs are not skipped. The script is .lefthook/pre-push/check.sh.
+    # The fast gate, on every push. A script, not `run`: lefthook skips a
+    # pre-push `run` job when the push changes no existing files (deletion-only
+    # pushes, tags, empty commits). Script jobs are not skipped. The script is
+    # .lefthook/pre-push/check.sh and runs `just check-fast`.
     - name: check
       script: check.sh
       runner: sh
       # Explicit args replace the remote name and URL that git passes to the
       # hook, which lefthook would otherwise append to the shell command unquoted.
       args: "--"
+
+    # The toolchain suite takes about 12 seconds, so it runs only when the push
+    # touches a file it tests. CI runs it on every change. The list must cover
+    # every file the suite copies (TOOLCHAIN_FILES in tests/toolchain/helpers.ts);
+    # a test there fails if it does not.
+    - name: toolchain-tests
+      run: just test-toolchain
+      glob:
+        - ".gitignore"
+        - ".lefthook/**"
+        - "biome.json"
+        - "bun.lock"
+        - "justfile"
+        - "lefthook.yml"
+        - "package.json"
+        - "tsconfig.json"
+        - "tests/toolchain/**"
