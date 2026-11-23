@@ -166,8 +166,9 @@ test("the CI job does not widen the workflow's read-only access", async () => {
 });
 
 test("no CI script swallows a failing command", async () => {
-	// `|| true` after the checksum check, or `set +e`, would let a tampered
-	// download through. No script here needs `||` at all.
+	// `|| true` after the checksum check, or `set +e`, `set +o errexit` and the
+	// like, would let a tampered download through. No script here needs `||`
+	// or `set +...` at all; a future one that does should change this test.
 	for (const step of await steps()) {
 		const script = step.run ?? "";
 		const label = step.name ?? step.uses;
@@ -177,7 +178,7 @@ test("no CI script swallows a failing command", async () => {
 		});
 		expect({ label, script }).toEqual({
 			label,
-			script: expect.not.stringMatching(/set\s+\+e|;\s*true\b/),
+			script: expect.not.stringMatching(/\bset\s+\+|;\s*true\b/),
 		});
 	}
 	const install = (await steps()).find(

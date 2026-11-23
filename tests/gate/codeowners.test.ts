@@ -56,10 +56,13 @@ function matcher(pattern: string): (file: string) => boolean {
 		.replace(/^\//, "")
 		.replace(/\/$/, "")
 		.replace(/[.+^${}()|[\]\\]/g, "\\$&")
-		.replace(/\*\*/g, "\u0000")
+		// `**/` also matches no directory at all: `**/justfile` owns `justfile`.
+		.replace(/\*\*\//g, "\u0000")
+		.replace(/\*\*/g, "\u0001")
 		.replace(/\*/g, "[^/]*")
 		.replace(/\?/g, "[^/]")
-		.replaceAll("\u0000", ".*");
+		.replaceAll("\u0000", "(?:.*/)?")
+		.replaceAll("\u0001", ".*");
 	const prefix = anchored ? "^" : "^(?:.*/)?";
 	// A directory pattern owns everything below it; a file pattern also
 	// matches a directory of that name and what is inside it.

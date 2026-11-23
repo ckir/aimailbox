@@ -27,13 +27,21 @@ test("lefthook.yml is the only tracked lefthook configuration", async () => {
 
 interface AnyWorkflow {
 	permissions?: unknown;
+	defaults?: unknown;
 	jobs?: Record<
 		string,
-		{ permissions?: unknown; uses?: string; steps?: { uses?: string }[] }
+		{
+			permissions?: unknown;
+			defaults?: unknown;
+			container?: unknown;
+			services?: unknown;
+			uses?: string;
+			steps?: { uses?: string }[];
+		}
 	>;
 }
 
-test("every workflow is read-only and pins its actions to full commit SHAs", async () => {
+test("every workflow is read-only, pins its actions to full commit SHAs and keeps the default shell", async () => {
 	// The tests in ci.test.ts read ci.yml only. A second workflow would
 	// otherwise be free to use a movable tag or ask for write access.
 	const directory = join(repoRoot, ".github/workflows");
@@ -47,11 +55,30 @@ test("every workflow is read-only and pins its actions to full commit SHAs", asy
 			file,
 			permissions: { contents: "read" },
 		});
+		expect({ file, defaults: workflow.defaults }).toEqual({
+			file,
+			defaults: undefined,
+		});
 		for (const [name, job] of Object.entries(workflow.jobs ?? {})) {
 			expect({ file, name, permissions: job.permissions }).toEqual({
 				file,
 				name,
 				permissions: undefined,
+			});
+			// `defaults.run.shell` can drop the shell's stop-on-error flags for
+			// every step; `container` and `services` pull images by movable tag.
+			expect({
+				file,
+				name,
+				defaults: job.defaults,
+				container: job.container,
+				services: job.services,
+			}).toEqual({
+				file,
+				name,
+				defaults: undefined,
+				container: undefined,
+				services: undefined,
 			});
 			const used = [job.uses, ...(job.steps ?? []).map((step) => step.uses)];
 			for (const uses of used) {
