@@ -48,3 +48,5 @@ Use [gitleaks](https://github.com/gitleaks/gitleaks) to keep secrets out of this
 - `just check` runs typecheck, lint, tests and the secret scan. Run it before declaring work done.
 - pre-commit runs Biome on staged files, the type check and the staged secret scan; pre-push runs `just check`.
 - GitHub Actions (`.github/workflows/ci.yml`) runs `just check` on pushes to `main` and on pull requests. Add new checks as `just` recipes under `check` so hooks and CI pick them up.
+- CI is the authoritative gate. The hooks are fast local feedback: they check the working tree, not the exact commit, so uncommitted or unstaged files can hide a problem in what is committed or pushed, and `--no-verify` skips them. Do not treat a passing hook as proof a commit is clean; commit or stash first and run `just check` when it matters.
+- `gitleaks:allow` comments are honoured, as the way to mark a false positive. Use them only for values that are not secrets.

@@ -19,3 +19,7 @@ just check   # type check, lint, tests and secret scan (what CI runs)
 ```
 
 Run `just` to list every recipe.
+
+The git hooks give fast local feedback but check your working tree, not the exact commit, and
+can be skipped. CI runs `just check` on every pull request and is the gate that counts; protect
+`main` on GitHub so the `check` job must pass before merging.

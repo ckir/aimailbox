@@ -1,4 +1,8 @@
 # Git hooks. Install with `just setup` (or `lefthook install`).
+#
+# These hooks are fast local feedback, not the gate: they check the working
+# tree rather than the exact commit, so uncommitted or unstaged files can mask
+# a problem. CI (.github/workflows/ci.yml) is authoritative.
 
 # Fail the git operation, rather than silently skipping the hooks, when the
 # lefthook binary cannot be found.
