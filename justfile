@@ -8,11 +8,12 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 default:
     @just --list
 
-# Install dependencies and git hooks (needs bun, lefthook and gitleaks on PATH; see README)
+# Install dependencies and git hooks (needs bun and gitleaks on PATH; see README).
+# lefthook is a dev dependency, so it is run from node_modules.
 setup:
-    @for tool in bun lefthook gitleaks; do command -v "$tool" >/dev/null || { echo "$tool is not installed; see README.md (Development)" >&2; exit 1; }; done
+    @for tool in bun gitleaks; do command -v "$tool" >/dev/null || { echo "$tool is not installed; see README.md (Development)" >&2; exit 1; }; done
     bun install
-    lefthook install
+    bun run --bun lefthook install
 
 # Type-check with tsc (Bun does not type-check when it runs code).
 # `bun run --bun` runs the installed binary on Bun, not Node, and unlike `bunx` never
@@ -54,6 +55,10 @@ secrets: secrets-staged
 # Scan only staged changes for secrets (used by the pre-commit hook)
 secrets-staged:
     gitleaks git --staged --no-banner --redact .
+
+# Scan a commit message file for secrets (used by the commit-msg hook)
+secrets-message file:
+    gitleaks stdin --no-banner --redact < "{{file}}"
 
 # The fast gate: what the pre-push hook always runs
 check-fast: typecheck lint test secrets

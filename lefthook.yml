@@ -1,4 +1,4 @@
-# Git hooks. Install with `just setup` (or `lefthook install`).
+# Git hooks. Install with `just setup` (or `bun run --bun lefthook install`).
 #
 # These hooks are fast local feedback, not the gate: they check the working
 # tree rather than the exact commit, so uncommitted or unstaged files can mask
@@ -21,6 +21,13 @@ pre-commit:
 
     - name: secrets
       run: just secrets-staged
+
+commit-msg:
+  jobs:
+    # The message is scanned before the commit exists, so a secret typed into
+    # it never enters the history. `{1}` is the path of the message file.
+    - name: secrets
+      run: just secrets-message "{1}"
 
 pre-push:
   jobs:

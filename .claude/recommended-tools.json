@@ -12,12 +12,6 @@
 		"in_path": "just"
 	},
 	{
-		"name": "lefthook",
-		"why": "Runs the pre-commit and pre-push git hooks in lefthook.yml",
-		"install": "`go install github.com/evilmartians/lefthook/v2@latest`, `brew install lefthook`, or see https://lefthook.dev/installation/",
-		"in_path": "lefthook"
-	},
-	{
 		"name": "gitleaks",
 		"why": "Secret scanning in the pre-commit hook and `just check`; the hook fails without it",
 		"install": "Install gitleaks 8.30.1 or newer for your platform: `brew install gitleaks`, or download the matching archive from https://github.com/gitleaks/gitleaks/releases, verify it against the release checksums file, and put the `gitleaks` binary on PATH",

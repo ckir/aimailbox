@@ -8,7 +8,6 @@ Prerequisites, installed on your machine and available on `PATH`:
 
 - [Bun](https://bun.sh) — runtime, package manager and test runner
 - [just](https://just.systems) — task runner
-- [lefthook](https://lefthook.dev) — git hooks
 - [gitleaks](https://github.com/gitleaks/gitleaks) — secret scanning
 
 Then:

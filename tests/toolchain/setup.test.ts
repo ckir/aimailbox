@@ -11,6 +11,8 @@ import {
 	addRemote,
 	cleanEnv,
 	cleanup,
+	fakeToken,
+	LEAK,
 	makeDir,
 	makeRepo,
 	must,
@@ -23,27 +25,34 @@ afterAll(cleanup);
 const TYPE_ERROR = 'export const n: number = "not a number";\n';
 
 /**
- * Run `just setup` in `repo` with the real tools, except `bun`, which is a
- * stub placed first on PATH: the throwaway repository already has
- * `node_modules`, and a real `bun install` would write through that link into
- * this project. The rest of PATH is kept, so tools that are wrapper scripts
- * still find what they need.
+ * Run `just setup` in `repo` with the real tools, except that `bun install`
+ * does nothing: the throwaway repository already has `node_modules`, and a
+ * real install would write through that link into this project. A stand-in
+ * `bun` placed first on PATH swallows `install` and passes every other
+ * command to the real `bun`, which `setup` needs to run lefthook. The rest of
+ * PATH is kept, so tools that are wrapper scripts still find what they need.
  */
 async function setUp(repo: string): Promise<void> {
 	const bin = makeDir();
-	writeFileSync(join(bin, "bun"), "#!/bin/sh\nexit 0\n");
+	const realBun = Bun.which("bun");
+	if (realBun === null) throw new Error("bun is not on PATH");
+	writeFileSync(
+		join(bin, "bun"),
+		`#!/bin/sh\nif [ "$1" = install ]; then exit 0; fi\nexec "${realBun}" "$@"\n`,
+	);
 	chmodSync(join(bin, "bun"), 0o755);
 	const path = `${bin}:${process.env.PATH ?? ""}`;
 	await must(repo, ["just", "setup"], cleanEnv({ PATH: path }));
 }
 
 test.concurrent(
-	"just setup installs the pre-commit and pre-push hooks",
+	"just setup installs the pre-commit, commit-msg and pre-push hooks",
 	async () => {
 		const repo = await makeRepo();
 		expect(existsSync(join(repo, ".git/hooks/pre-commit"))).toBe(false);
 		await setUp(repo);
 		expect(existsSync(join(repo, ".git/hooks/pre-commit"))).toBe(true);
+		expect(existsSync(join(repo, ".git/hooks/commit-msg"))).toBe(true);
 		expect(existsSync(join(repo, ".git/hooks/pre-push"))).toBe(true);
 	},
 	SLOW,
@@ -102,6 +111,34 @@ test.concurrent(
 		await must(repo, ["rm", "src/bad.ts"]);
 		const allowed = await run(repo, ["git", "push", "origin", "main"]);
 		expect(allowed.exitCode).toBe(0);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"after just setup, git commit is blocked by a secret in the commit message",
+	async () => {
+		const repo = await makeRepo();
+		await setUp(repo);
+
+		mkdirSync(join(repo, "tools"));
+		writeFileSync(join(repo, "tools/ok.mjs"), "export const ok = true;\n");
+		await must(repo, ["git", "add", "tools/ok.mjs"]);
+		const blocked = await run(repo, [
+			"git",
+			"commit",
+			"-m",
+			`add a file\n\nTested with ${fakeToken()}.`,
+		]);
+		expect(blocked.output).toContain(LEAK);
+		expect(blocked.exitCode).not.toBe(0);
+		const after = await must(repo, ["git", "rev-list", "--count", "HEAD"]);
+		expect(after.output.trim()).toBe("1");
+
+		const allowed = await run(repo, ["git", "commit", "-m", "add a file"]);
+		expect(allowed.exitCode).toBe(0);
+		const count = await must(repo, ["git", "rev-list", "--count", "HEAD"]);
+		expect(count.output.trim()).toBe("2");
 	},
 	SLOW,
 );

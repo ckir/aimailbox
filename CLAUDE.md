@@ -20,8 +20,10 @@ Use [just](https://just.systems) for project tasks, not npm scripts or Makefiles
 
 Use [lefthook](https://lefthook.dev) for git hooks, not husky, pre-commit or hand-written `.git/hooks` scripts.
 
-- Configure hooks in the root `lefthook.yml`; install them with `lefthook install`.
+- lefthook is a dev dependency pinned in `package.json`, not a machine-level tool. Run it as `bun run --bun lefthook <command>`.
+- Configure hooks in the root `lefthook.yml`; `just setup` installs them.
 - Hooks should call `just` recipes where one exists, so checks run the same way locally and in hooks.
+- Three hooks are installed: pre-commit, commit-msg and pre-push.
 
 ## Type checking
 
@@ -54,7 +56,8 @@ Use [gitleaks](https://github.com/gitleaks/gitleaks) to keep secrets out of this
 
 - `just setup` installs dependencies and git hooks on a fresh clone.
 - `just check` is the full gate: `check-fast` (typecheck, lint, `just test`, secret scan) plus `just test-toolchain`. Run it before declaring work done. `just check-fast` is the quick version for the inner loop.
-- pre-commit runs Biome on staged files, the type check and the staged secret scan. pre-push always runs `just check-fast`, and also runs `just test-toolchain` when the push touches a file that suite tests.
+- pre-commit runs Biome on staged files, the type check and the staged secret scan. commit-msg scans the commit message for secrets before the commit is created. pre-push always runs `just check-fast`, and also runs `just test-toolchain` when the push touches a file that suite tests.
 - GitHub Actions (`.github/workflows/ci.yml`) runs `just check` on pushes to `main` and on pull requests. Add a new check as a `just` recipe under `check-fast` so the hook and CI both pick it up; a recipe added only under `check` runs in CI but not on push.
+- The workflow pins each action to a full commit SHA, with the version in a trailing comment. To update one, look up the commit a release tag points at and change both. `.github/CODEOWNERS` routes changes to the workflow and to `tests/gate/` to the owner; it only has effect with branch protection requiring Code Owner review.
 - CI is the authoritative gate. The hooks are fast local feedback: they check the working tree, not the exact commit, so uncommitted or unstaged files can hide a problem in what is committed or pushed, and `--no-verify` skips them. Do not treat a passing hook as proof a commit is clean; commit or stash first and run `just check` when it matters.
 - `gitleaks:allow` comments are honoured, as the way to mark a false positive. Use them only for values that are not secrets.

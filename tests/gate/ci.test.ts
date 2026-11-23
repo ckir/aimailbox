@@ -85,12 +85,7 @@ test("CI installs dependencies from the lockfile", async () => {
 
 test("CI pins the version of every tool it installs", async () => {
 	const workflow = await loadWorkflow();
-	for (const name of [
-		"BUN_VERSION",
-		"JUST_VERSION",
-		"GITLEAKS_VERSION",
-		"LEFTHOOK_VERSION",
-	]) {
+	for (const name of ["BUN_VERSION", "JUST_VERSION", "GITLEAKS_VERSION"]) {
 		expect({ name, value: String(workflow.env[name]) }).toEqual({
 			name,
 			value: expect.stringMatching(/^\d+\.\d+\.\d+$/),
@@ -105,11 +100,21 @@ test("CI pins the version of every tool it installs", async () => {
 	);
 });
 
+test("CI pins every action to a full commit SHA", async () => {
+	// A version tag can be moved to different code; a commit SHA cannot.
+	const used = (await steps())
+		.map((step) => step.uses)
+		.filter((uses) => uses !== undefined);
+	expect(used.length).toBeGreaterThan(0);
+	for (const uses of used) {
+		expect(uses).toMatch(/^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/);
+	}
+});
+
 test("CI downloads each binary at its pinned version and verifies its checksum", async () => {
 	const all = await steps();
 	for (const [name, variable] of [
 		["Install gitleaks", "GITLEAKS_VERSION"],
-		["Install lefthook", "LEFTHOOK_VERSION"],
 	] as const) {
 		const step = all.find((candidate) => candidate.name === name);
 		const script = step?.run ?? "";

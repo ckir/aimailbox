@@ -21,6 +21,7 @@ import {
 	cleanup,
 	commitAll,
 	FAILING_TEST,
+	LEFTHOOK,
 	makeRepo,
 	must,
 	run,
@@ -158,7 +159,7 @@ test.concurrent(
 		appendFileSync(join(repo, "justfile"), "\n");
 		await commitAll(repo, "touch the justfile");
 		const result = await run(repo, [
-			"lefthook",
+			LEFTHOOK,
 			"run",
 			"pre-push",
 			"--job",
@@ -195,7 +196,7 @@ test.concurrent(
 			appendFileSync(join(repo, file), "\n");
 			await commitAll(repo, `touch ${file}`);
 			await run(repo, [
-				"lefthook",
+				LEFTHOOK,
 				"run",
 				"pre-push",
 				"--job",
@@ -222,7 +223,7 @@ test.concurrent(
 		mkdirSync(join(repo, "docs"));
 		writeFileSync(join(repo, "docs/notes.md"), "# Notes\n");
 		await commitAll(repo, "change product code and docs");
-		const result = await run(repo, ["lefthook", "run", "pre-push"]);
+		const result = await run(repo, [LEFTHOOK, "run", "pre-push"]);
 		expect(result.output).toContain("toolchain-tests (skip)");
 		expect(result.output).toContain("gitleaks git");
 		expect(existsSync(join(repo, MARKER))).toBe(false);

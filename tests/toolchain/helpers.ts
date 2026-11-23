@@ -20,6 +20,19 @@ import { join, resolve } from "node:path";
 
 export const repoRoot = resolve(import.meta.dir, "../..");
 
+/**
+ * The lefthook binary this project depends on, taken from node_modules. The
+ * platform package holds the real binary; calling it directly avoids the
+ * package's launcher script, which needs Node.
+ */
+export const LEFTHOOK = join(
+	repoRoot,
+	"node_modules",
+	`lefthook-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`,
+	"bin",
+	process.platform === "win32" ? "lefthook.exe" : "lefthook",
+);
+
 /** Long enough for a hook that runs the whole of `just check` on a busy machine. */
 export const SLOW = 120_000;
 

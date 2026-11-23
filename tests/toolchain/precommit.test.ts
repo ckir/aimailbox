@@ -11,7 +11,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { cleanup, makeRepo, must, run, SLOW } from "./helpers.ts";
+import { cleanup, LEFTHOOK, makeRepo, must, run, SLOW } from "./helpers.ts";
 
 afterAll(cleanup);
 
@@ -28,7 +28,7 @@ test.concurrent(
 		writeFileSync(join(repo, "tools/value.mjs"), UNFORMATTED);
 		await must(repo, ["git", "add", "tools/value.mjs"]);
 
-		const result = await run(repo, ["lefthook", "run", "pre-commit"]);
+		const result = await run(repo, [LEFTHOOK, "run", "pre-commit"]);
 		expect(result.exitCode).toBe(0);
 		const staged = await must(repo, ["git", "show", ":tools/value.mjs"]);
 		expect(staged.output).toBe(FORMATTED);
@@ -46,7 +46,7 @@ test.concurrent(
 		// A change to a tracked file that is deliberately not staged.
 		appendFileSync(join(repo, "src/index.ts"), "export const draft = 2;\n");
 
-		const result = await run(repo, ["lefthook", "run", "pre-commit"]);
+		const result = await run(repo, [LEFTHOOK, "run", "pre-commit"]);
 		expect(result.exitCode).toBe(0);
 		expect(readFileSync(join(repo, "src/index.ts"), "utf8")).toContain(
 			"export const draft = 2;",
@@ -69,7 +69,7 @@ test.concurrent(
 		writeFileSync(join(repo, "notes/plain.txt"), "nothing to check here\n");
 		await must(repo, ["git", "add", "notes/plain.txt"]);
 
-		const result = await run(repo, ["lefthook", "run", "pre-commit"]);
+		const result = await run(repo, [LEFTHOOK, "run", "pre-commit"]);
 		expect(result.exitCode).toBe(0);
 	},
 	SLOW,
