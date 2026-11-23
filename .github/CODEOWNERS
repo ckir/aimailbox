@@ -1,0 +1,17 @@
+# Changes to the CI workflow, to the recipes and hooks it and the developers
+# run, to the tool settings and pinned dependencies they rely on, to the tests
+# that guard them, or to this file need the owner's review. This only takes
+# effect once branch protection on `main` has "Require review from Code
+# Owners" switched on.
+
+/.github/workflows/ @ckir
+/.github/CODEOWNERS @ckir
+/tests/gate/ @ckir
+/justfile @ckir
+/lefthook.yml @ckir
+/.lefthook/ @ckir
+/tests/toolchain/ @ckir
+/package.json @ckir
+/bun.lock @ckir
+/biome.json @ckir
+/tsconfig.json @ckir

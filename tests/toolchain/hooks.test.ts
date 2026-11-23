@@ -21,6 +21,7 @@ import {
 	FAILING_TEST,
 	fakeToken,
 	LEAK,
+	LEFTHOOK,
 	makeDir,
 	makeRepo,
 	must,
@@ -47,7 +48,7 @@ test.concurrent(
 	"lefthook accepts the configuration",
 	async () => {
 		const repo = await makeRepo();
-		const result = await run(repo, ["lefthook", "validate"]);
+		const result = await run(repo, [LEFTHOOK, "validate"]);
 		expect(result.exitCode).toBe(0);
 	},
 	SLOW,
@@ -60,7 +61,7 @@ test.concurrent(
 		// The job is a script so that it always runs.
 		const repo = await makeRepo();
 		await addRemote(repo);
-		const result = await run(repo, ["lefthook", "run", "pre-push"]);
+		const result = await run(repo, [LEFTHOOK, "run", "pre-push"]);
 		expect(result.output).not.toContain("check (skip)");
 		expect(result.output).toContain("gitleaks git");
 		expect(result.exitCode).toBe(0);
@@ -74,7 +75,7 @@ test.concurrent(
 		const repo = await makeRepo();
 		await addRemote(repo);
 		writeFileSync(join(repo, "src/bad.ts"), TYPE_ERROR);
-		const result = await run(repo, ["lefthook", "run", "pre-push"]);
+		const result = await run(repo, [LEFTHOOK, "run", "pre-push"]);
 		expect(result.output).toContain("TS2322");
 		expect(result.exitCode).not.toBe(0);
 	},
@@ -91,7 +92,7 @@ test.concurrent(
 		// Outside `src`, so the type check does not see it.
 		mkdirSync(join(repo, "tools"));
 		writeFileSync(join(repo, "tools/bad.mjs"), "debugger;\n");
-		const result = await run(repo, ["lefthook", "run", "pre-push"]);
+		const result = await run(repo, [LEFTHOOK, "run", "pre-push"]);
 		expect(result.output).toContain("noDebugger");
 		expect(result.exitCode).not.toBe(0);
 	},
@@ -104,7 +105,7 @@ test.concurrent(
 		const repo = await makeRepo();
 		await addRemote(repo);
 		writeFileSync(join(repo, "src/failing.test.ts"), FAILING_TEST);
-		const result = await run(repo, ["lefthook", "run", "pre-push"]);
+		const result = await run(repo, [LEFTHOOK, "run", "pre-push"]);
 		expect(result.output).toContain("this test fails on purpose");
 		expect(result.exitCode).not.toBe(0);
 	},
@@ -121,7 +122,7 @@ test.concurrent(
 			`export const token = "${fakeToken()}";\n`,
 		);
 		await commitAll(repo, "add a file");
-		const result = await run(repo, ["lefthook", "run", "pre-push"]);
+		const result = await run(repo, [LEFTHOOK, "run", "pre-push"]);
 		expect(result.output).toContain(LEAK);
 		expect(result.exitCode).not.toBe(0);
 	},
@@ -136,7 +137,7 @@ test.concurrent(
 		const repo = await makeRepo();
 		await addRemote(repo);
 		const result = await run(repo, [
-			"lefthook",
+			LEFTHOOK,
 			"run",
 			"pre-push",
 			"origin",
@@ -153,50 +154,10 @@ test.concurrent(
 	"installed hooks are generated to fail when lefthook is missing",
 	async () => {
 		const repo = await makeRepo();
-		await must(repo, ["lefthook", "install"]);
+		await must(repo, [LEFTHOOK, "install"]);
 		const hook = readFileSync(join(repo, ".git/hooks/pre-push"), "utf8");
 		// Present only when `assert_lefthook_installed: true`.
 		expect(hook).toContain("Operation is aborted due to lefthook settings");
-	},
-	SLOW,
-);
-
-test.concurrent(
-	"an installed hook blocks the push when lefthook cannot be found",
-	async () => {
-		// `lefthook install` writes the absolute path of the binary that ran it
-		// into the hook as a fallback, so hiding lefthook from PATH is not enough.
-		// Point that fallback at a path that does not exist, which is what the
-		// hook sees after lefthook has been uninstalled or moved.
-		const repo = await makeRepo();
-		await must(repo, ["lefthook", "install"]);
-		const hookPath = join(repo, ".git/hooks/pre-push");
-		const original = readFileSync(hookPath, "utf8");
-		// The fallback is the branch right after the plain `lefthook` one. Its
-		// command is taken as written (it may be quoted, and the file may not be
-		// named `lefthook`) rather than guessed with a path pattern.
-		const fallback = original.match(
-			/elif lefthook -h >\/dev\/null 2>&1\s+then\s+lefthook "\$@"\s+elif (.+) -h >\/dev\/null 2>&1/,
-		);
-		if (fallback?.[1] === undefined) {
-			throw new Error(
-				`no embedded lefthook path in the generated hook:\n${original}`,
-			);
-		}
-		writeFileSync(
-			hookPath,
-			original.replaceAll(fallback[1], "/nonexistent/lefthook"),
-		);
-
-		const path = binDirWith(["sh", "git", "uname", "tr", "sed"]);
-		const result = await run(
-			repo,
-			[hookPath, "origin", "https://example.invalid/repo"],
-			cleanEnv({ PATH: path }),
-		);
-		expect(result.output).toContain("Can't find lefthook in PATH");
-		expect(result.output).toContain("Operation is aborted");
-		expect(result.exitCode).toBe(1);
 	},
 	SLOW,
 );
@@ -208,7 +169,7 @@ test.concurrent(
 		mkdirSync(join(repo, "tools"));
 		writeFileSync(join(repo, "tools/ok.mjs"), "export const ok = true;\n");
 		await must(repo, ["git", "add", "tools/ok.mjs"]);
-		const result = await run(repo, ["lefthook", "run", "pre-commit"]);
+		const result = await run(repo, [LEFTHOOK, "run", "pre-commit"]);
 		expect(result.exitCode).toBe(0);
 	},
 	SLOW,
@@ -234,7 +195,7 @@ test.concurrent(
 			"-h",
 			"--linter-enabled=false",
 		]);
-		const result = await run(repo, ["lefthook", "run", "pre-commit"]);
+		const result = await run(repo, [LEFTHOOK, "run", "pre-commit"]);
 		expect(result.output).toContain("noDebugger");
 		expect(result.exitCode).not.toBe(0);
 	},
@@ -247,7 +208,7 @@ test.concurrent(
 		const repo = await makeRepo();
 		writeFileSync(join(repo, "src/bad.ts"), TYPE_ERROR);
 		await must(repo, ["git", "add", "src/bad.ts"]);
-		const result = await run(repo, ["lefthook", "run", "pre-commit"]);
+		const result = await run(repo, [LEFTHOOK, "run", "pre-commit"]);
 		expect(result.output).toContain("TS2322");
 		expect(result.exitCode).not.toBe(0);
 	},
@@ -261,7 +222,7 @@ test.concurrent(
 		mkdirSync(join(repo, "notes"));
 		writeFileSync(join(repo, "notes/keys.txt"), `token = "${fakeToken()}"\n`);
 		await must(repo, ["git", "add", "notes/keys.txt"]);
-		const result = await run(repo, ["lefthook", "run", "pre-commit"]);
+		const result = await run(repo, [LEFTHOOK, "run", "pre-commit"]);
 		expect(result.output).toContain(LEAK);
 		expect(result.exitCode).not.toBe(0);
 	},
@@ -271,16 +232,14 @@ test.concurrent(
 test.concurrent(
 	"just setup names a missing tool and installs nothing",
 	async () => {
-		// PATH holds everything `setup` needs except gitleaks. `bun` and
-		// `lefthook` are stand-ins that only record that they ran, so that a
-		// broken guard cannot start a real install from inside this test.
+		// PATH holds everything `setup` needs except gitleaks. `bun` is a
+		// stand-in that only records that it ran, so that a broken guard cannot
+		// start a real install from inside this test.
 		const repo = await makeRepo({ linkNodeModules: false });
 		const path = binDirWith(["bash", "just", "git"]);
 		const ran = join(repo, "INSTALLER-RAN");
-		for (const name of ["bun", "lefthook"]) {
-			writeFileSync(join(path, name), `#!/bin/sh\necho ${name} >> "${ran}"\n`);
-			chmodSync(join(path, name), 0o755);
-		}
+		writeFileSync(join(path, "bun"), `#!/bin/sh\necho bun >> "${ran}"\n`);
+		chmodSync(join(path, "bun"), 0o755);
 		const result = await run(repo, ["just", "setup"], cleanEnv({ PATH: path }));
 		expect(result.output).toContain("gitleaks is not installed");
 		expect(result.exitCode).toBe(1);

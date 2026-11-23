@@ -8,11 +8,12 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 default:
     @just --list
 
-# Install dependencies and git hooks (needs bun, lefthook and gitleaks on PATH; see README)
+# Install dependencies and git hooks (needs bun and gitleaks on PATH; see README).
+# lefthook is a dev dependency, so it is run from node_modules.
 setup:
-    @for tool in bun lefthook gitleaks; do command -v "$tool" >/dev/null || { echo "$tool is not installed; see README.md (Development)" >&2; exit 1; }; done
+    @for tool in bun gitleaks; do command -v "$tool" >/dev/null || { echo "$tool is not installed; see README.md (Development)" >&2; exit 1; }; done
     bun install
-    lefthook install
+    bun run --bun lefthook install
 
 # Type-check with tsc (Bun does not type-check when it runs code).
 # `bun run --bun` runs the installed binary on Bun, not Node, and unlike `bunx` never
@@ -54,6 +55,24 @@ secrets: secrets-staged
 # Scan only staged changes for secrets (used by the pre-commit hook)
 secrets-staged:
     gitleaks git --staged --no-banner --redact .
+
+# Scan the commit message file for secrets (used by the commit-msg hook).
+# The path arrives in HOOK_ARG_1, exported by .lefthook/rc.sh, never as text
+# pasted into a command: a path containing shell syntax is then not run.
+# Without it there is nothing to scan, so the recipe fails rather than passes.
+# It also fails when rc.sh is missing: lefthook skips a missing rc file
+# silently, and HOOK_ARG_1 could then be a stale value from the caller's
+# environment rather than the file git is about to commit. For the same
+# reason the path must be a regular file inside the git directory, which is
+# where git keeps every commit message file, linked worktrees included.
+# CDPATH is unset for the comparison because with it set `cd` prints the
+# directory it chose, which would end up in the captured path.
+secrets-message:
+    @test -f .lefthook/rc.sh || { echo "secrets-message: .lefthook/rc.sh is missing, so the message file cannot be identified" >&2; exit 1; }
+    @test -n "${HOOK_ARG_1:-}" || { echo "secrets-message: HOOK_ARG_1 is not set; this recipe runs from the commit-msg hook" >&2; exit 1; }
+    @test -f "$HOOK_ARG_1" && ! test -L "$HOOK_ARG_1" || { echo "secrets-message: HOOK_ARG_1 does not name a regular file" >&2; exit 1; }
+    @unset CDPATH; dir="$(cd -- "$(dirname -- "$HOOK_ARG_1")" && pwd -P)"; common="$(cd -- "$(git rev-parse --git-common-dir)" && pwd -P)"; case "$dir/" in "$common"/*) ;; *) echo "secrets-message: HOOK_ARG_1 is outside the git directory, so it is not a commit message file" >&2; exit 1 ;; esac
+    gitleaks stdin --no-banner --redact < "$HOOK_ARG_1"
 
 # The fast gate: what the pre-push hook always runs
 check-fast: typecheck lint test secrets

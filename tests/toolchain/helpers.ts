@@ -20,6 +20,19 @@ import { join, resolve } from "node:path";
 
 export const repoRoot = resolve(import.meta.dir, "../..");
 
+/**
+ * The lefthook binary this project depends on, taken from node_modules. The
+ * platform package holds the real binary; calling it directly avoids the
+ * package's launcher script, which needs Node.
+ */
+export const LEFTHOOK = join(
+	repoRoot,
+	"node_modules",
+	`lefthook-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`,
+	"bin",
+	process.platform === "win32" ? "lefthook.exe" : "lefthook",
+);
+
 /** Long enough for a hook that runs the whole of `just check` on a busy machine. */
 export const SLOW = 120_000;
 
@@ -57,7 +70,17 @@ test("fixture", () => {
  * Environment variables that change what the tools under test do. They are
  * dropped so that a developer's shell settings cannot alter the result.
  */
-const DROPPED_PREFIXES = ["GIT_", "LEFTHOOK", "GITLEAKS_", "BIOME_", "JUST_"];
+const DROPPED_PREFIXES = [
+	"GIT_",
+	"LEFTHOOK",
+	"GITLEAKS_",
+	"BIOME_",
+	"JUST_",
+	// Exported by .lefthook/rc.sh in the hook this suite may be running under.
+	"HOOK_ARG_",
+	// Changes what `cd` prints; a test sets it on purpose where that matters.
+	"CDPATH",
+];
 const DROPPED_NAMES = new Set(["BASH_ENV", "ENV"]);
 
 const created: string[] = [];
