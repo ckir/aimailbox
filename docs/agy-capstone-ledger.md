@@ -10,6 +10,7 @@ commit is the one that was reviewed and confirmed.
 | 2026-11-23 | 54cfa2a..b060561 (toolchain tests and their placement)                   | 5      | ALIGNED, GREEN confirmed by the owner | Fold commits bcb9065, 941ddee, 5dbe7c7, b060561; placement commit 2363944. Round 5 was clean and narrowed to b060561. |
 | 2026-11-23 | 8248cb5..b7020c6 (second-audit tests)                                    | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit b7020c6; docs-only follow-up 9e22619. Round 2 found no defect in the test code.                           |
 | 2026-11-23 | f78d7d8..4034060 (CODEOWNERS, SHA pins, commit-msg hook, local lefthook) | 4      | ALIGNED, GREEN confirmed by the owner | Fold commits 4f31e38, f3b6a52, 4034060 on top of 8dda991. Rounds 3 and 4 were clean.                                  |
+| 2026-11-23 | cd68f70..eb72824 (message-file check, wider CODEOWNERS)                  | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit eb72824 on top of f8e716f; comment-only follow-up c506136. Round 2 found no runtime defect.               |
 
 ## Notes for the 2026-11-23 review
 
@@ -59,3 +60,17 @@ commit is the one that was reviewed and confirmed.
   reproduced and closed before round 4, which was also clean.
 - Not covered by the clean rounds: rounds 3 and 4 were narrowed to one commit each; CODEOWNERS
   enforcement depends on branch protection, which is not set; not tested on macOS or Windows.
+
+## Notes for the message-file check review (cd68f70..eb72824)
+
+- Findings: 2 across rounds 1 and 2. Round 1: with `CDPATH` exported, the directory comparison
+  refused a message file given by absolute path (fixed in eb72824, which also refuses a
+  symbolic link). Round 2: the driver overstated that bug's impact; an ordinary `git commit`
+  was never affected. The test comment is corrected in c506136; the commit message of eb72824
+  still carries the overstatement.
+- Not covered by the clean round: round 2 was narrowed to eb72824; c506136 (a comment) was not
+  reviewed; not tested on macOS or Windows.
+- Known and accepted: `JUST_DRY_RUN=true` or an exported shell function named `cd` in the
+  developer's own shell can defeat the local commit-msg check; CI is unaffected.
+- Not added: `package.json`, `bun.lock`, `biome.json` and `tsconfig.json` are outside
+  CODEOWNERS; the owner chose the list of owned paths.
