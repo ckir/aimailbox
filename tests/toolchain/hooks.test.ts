@@ -17,6 +17,8 @@ import {
 	addRemote,
 	cleanEnv,
 	cleanup,
+	commitAll,
+	FAILING_TEST,
 	fakeToken,
 	LEAK,
 	makeDir,
@@ -79,6 +81,53 @@ test.concurrent(
 	SLOW,
 );
 
+// The fast gate has four parts. Each case below is caught by exactly one of
+// them, so the hook cannot quietly stop running a part.
+test.concurrent(
+	"pre-push fails on a lint error even when there is nothing to push",
+	async () => {
+		const repo = await makeRepo();
+		await addRemote(repo);
+		// Outside `src`, so the type check does not see it.
+		mkdirSync(join(repo, "tools"));
+		writeFileSync(join(repo, "tools/bad.mjs"), "debugger;\n");
+		const result = await run(repo, ["lefthook", "run", "pre-push"]);
+		expect(result.output).toContain("noDebugger");
+		expect(result.exitCode).not.toBe(0);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"pre-push fails on a failing test even when there is nothing to push",
+	async () => {
+		const repo = await makeRepo();
+		await addRemote(repo);
+		writeFileSync(join(repo, "src/failing.test.ts"), FAILING_TEST);
+		const result = await run(repo, ["lefthook", "run", "pre-push"]);
+		expect(result.output).toContain("this test fails on purpose");
+		expect(result.exitCode).not.toBe(0);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"pre-push fails on a secret in the history being pushed",
+	async () => {
+		const repo = await makeRepo();
+		await addRemote(repo);
+		writeFileSync(
+			join(repo, "src/leak.ts"),
+			`export const token = "${fakeToken()}";\n`,
+		);
+		await commitAll(repo, "add a file");
+		const result = await run(repo, ["lefthook", "run", "pre-push"]);
+		expect(result.output).toContain(LEAK);
+		expect(result.exitCode).not.toBe(0);
+	},
+	SLOW,
+);
+
 test.concurrent(
 	"pre-push does not execute shell syntax in the remote URL",
 	async () => {
@@ -123,11 +172,20 @@ test.concurrent(
 		await must(repo, ["lefthook", "install"]);
 		const hookPath = join(repo, ".git/hooks/pre-push");
 		const original = readFileSync(hookPath, "utf8");
-		const embedded = /(?<=\s)\/\S*lefthook(?=\s)/g;
-		expect(original).toMatch(embedded);
+		// The fallback is the branch right after the plain `lefthook` one. Its
+		// command is taken as written (it may be quoted, and the file may not be
+		// named `lefthook`) rather than guessed with a path pattern.
+		const fallback = original.match(
+			/elif lefthook -h >\/dev\/null 2>&1\s+then\s+lefthook "\$@"\s+elif (.+) -h >\/dev\/null 2>&1/,
+		);
+		if (fallback?.[1] === undefined) {
+			throw new Error(
+				`no embedded lefthook path in the generated hook:\n${original}`,
+			);
+		}
 		writeFileSync(
 			hookPath,
-			original.replace(embedded, "/nonexistent/lefthook"),
+			original.replaceAll(fallback[1], "/nonexistent/lefthook"),
 		);
 
 		const path = binDirWith(["sh", "git", "uname", "tr", "sed"]);

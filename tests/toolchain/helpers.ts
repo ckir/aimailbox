@@ -214,6 +214,14 @@ export function fakeToken(): string {
 	return `ghp_${body}`;
 }
 
+/** A test file whose one test always fails, and passes the type check and the linter. */
+export const FAILING_TEST = `import { expect, test } from "bun:test";
+
+test("this test fails on purpose", () => {
+	expect(1 + 1).toBe(3);
+});
+`;
+
 /** Remove every directory this module created. Call from `afterAll`. */
 export function cleanup(): void {
 	for (const dir of created.splice(0)) {

@@ -20,6 +20,7 @@ import {
 	addRemote,
 	cleanup,
 	commitAll,
+	FAILING_TEST,
 	makeRepo,
 	must,
 	run,
@@ -115,6 +116,56 @@ test.concurrent(
 		const result = await run(repo, ["just", "test-toolchain"]);
 		expect(result.exitCode).toBe(0);
 		expect(existsSync(join(repo, MARKER))).toBe(true);
+	},
+	SLOW,
+);
+
+// A recipe or hook job that swallowed a failure (for example with `|| true`)
+// would still appear to run. These cases need the failure to come through.
+test.concurrent(
+	"just test fails when a test fails",
+	async () => {
+		const repo = await makeRepo();
+		writeFileSync(join(repo, "src/failing.test.ts"), FAILING_TEST);
+		const result = await run(repo, ["just", "test"]);
+		expect(result.output).toContain("this test fails on purpose");
+		expect(result.exitCode).not.toBe(0);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"just test-toolchain fails when a toolchain test fails",
+	async () => {
+		const repo = await makeRepo();
+		mkdirSync(join(repo, "tests/toolchain"), { recursive: true });
+		writeFileSync(join(repo, "tests/toolchain/failing.test.ts"), FAILING_TEST);
+		const result = await run(repo, ["just", "test-toolchain"]);
+		expect(result.output).toContain("this test fails on purpose");
+		expect(result.exitCode).not.toBe(0);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"pre-push fails when the toolchain suite fails",
+	async () => {
+		const repo = await makeRepo();
+		mkdirSync(join(repo, "tests/toolchain"), { recursive: true });
+		writeFileSync(join(repo, "tests/toolchain/failing.test.ts"), FAILING_TEST);
+		await commitAll(repo, "add a failing toolchain test");
+		await addRemote(repo);
+		appendFileSync(join(repo, "justfile"), "\n");
+		await commitAll(repo, "touch the justfile");
+		const result = await run(repo, [
+			"lefthook",
+			"run",
+			"pre-push",
+			"--job",
+			"toolchain-tests",
+		]);
+		expect(result.output).toContain("this test fails on purpose");
+		expect(result.exitCode).not.toBe(0);
 	},
 	SLOW,
 );
