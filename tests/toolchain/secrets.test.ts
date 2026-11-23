@@ -24,6 +24,20 @@ afterAll(cleanup);
 
 const secretLine = () => `export const token = "${fakeToken()}";\n`;
 
+/**
+ * Put clean commits on top of whatever is at HEAD. A secret must be found
+ * however far back it is, so the history cases bury theirs: a scan cut down
+ * to the newest few commits would otherwise pass every test. Each commit
+ * changes a file, because git leaves empty commits out when it counts
+ * commits for a filtered log.
+ */
+async function bury(repo: string): Promise<void> {
+	for (let depth = 1; depth <= 5; depth++) {
+		writeFileSync(join(repo, `later-${depth}.txt`), `later work ${depth}\n`);
+		await commitAll(repo, `later work ${depth}`);
+	}
+}
+
 test.concurrent(
 	"just secrets passes on a clean repository",
 	async () => {
@@ -41,6 +55,7 @@ test.concurrent(
 		const repo = await makeRepo();
 		writeFileSync(join(repo, "src/leak.ts"), secretLine());
 		await commitAll(repo, "add a file");
+		await bury(repo);
 		const result = await run(repo, ["just", "secrets"]);
 		expect(result.output).toContain(LEAK);
 		expect(result.exitCode).not.toBe(0);
@@ -97,6 +112,7 @@ test.concurrent(
 		await commitAll(repo, "merge side");
 		const parents = await must(repo, ["git", "log", "-1", "--format=%P"]);
 		expect(parents.output.trim().split(" ")).toHaveLength(2);
+		await bury(repo);
 
 		const result = await run(repo, ["just", "secrets"]);
 		expect(result.output).toContain(LEAK);
@@ -118,6 +134,38 @@ test.concurrent(
 			"-m",
 			`deploy with ${fakeToken()}`,
 		]);
+		await bury(repo);
+		const result = await run(repo, ["just", "secrets"]);
+		expect(result.output).toContain(LEAK);
+		expect(result.exitCode).not.toBe(0);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"just secrets fails on a secret in a merge commit's message",
+	async () => {
+		const repo = await makeRepo();
+		await must(repo, ["git", "switch", "--quiet", "--create", "side"]);
+		writeFileSync(join(repo, "side.txt"), "side\n");
+		await commitAll(repo, "side change");
+		await must(repo, ["git", "switch", "--quiet", "main"]);
+		writeFileSync(join(repo, "main.txt"), "main\n");
+		await commitAll(repo, "main change");
+		await must(repo, [
+			"git",
+			"merge",
+			"--quiet",
+			"--no-ff",
+			"--no-verify",
+			"-m",
+			`merge side, token ${fakeToken()}`,
+			"side",
+		]);
+		const parents = await must(repo, ["git", "log", "-1", "--format=%P"]);
+		expect(parents.output.trim().split(" ")).toHaveLength(2);
+		await bury(repo);
+
 		const result = await run(repo, ["just", "secrets"]);
 		expect(result.output).toContain(LEAK);
 		expect(result.exitCode).not.toBe(0);
@@ -136,6 +184,7 @@ test.concurrent(
 		rmSync(join(repo, "config-link"));
 		writeFileSync(join(repo, "config-link"), `token = "${fakeToken()}"\n`);
 		await commitAll(repo, "replace the link with a file");
+		await bury(repo);
 		const result = await run(repo, ["just", "secrets"]);
 		expect(result.output).toContain(LEAK);
 		expect(result.exitCode).not.toBe(0);
