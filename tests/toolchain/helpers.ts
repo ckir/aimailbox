@@ -229,10 +229,15 @@ export async function addRemote(dir: string): Promise<void> {
 export function fakeToken(): string {
 	const alphabet =
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-	const bytes = crypto.getRandomValues(new Uint8Array(36));
+	// Six bits of each random byte give a number from 0 to 63. The two values
+	// past the end of the alphabet are thrown away, so every character is
+	// equally likely.
 	let body = "";
-	for (const byte of bytes) {
-		body += alphabet[byte % alphabet.length];
+	while (body.length < 36) {
+		for (const byte of crypto.getRandomValues(new Uint8Array(36))) {
+			const character = alphabet[byte & 63];
+			if (character !== undefined && body.length < 36) body += character;
+		}
 	}
 	return `ghp_${body}`;
 }
