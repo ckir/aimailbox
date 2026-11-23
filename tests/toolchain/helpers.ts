@@ -78,6 +78,8 @@ const DROPPED_PREFIXES = [
 	"JUST_",
 	// Exported by .lefthook/rc.sh in the hook this suite may be running under.
 	"HOOK_ARG_",
+	// Changes what `cd` prints; a test sets it on purpose where that matters.
+	"CDPATH",
 ];
 const DROPPED_NAMES = new Set(["BASH_ENV", "ENV"]);
 

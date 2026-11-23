@@ -225,3 +225,42 @@ test.concurrent(
 	},
 	SLOW,
 );
+
+test.concurrent(
+	"commit-msg works when the caller has CDPATH set",
+	async () => {
+		// With CDPATH set, `cd` prints the directory it chose. The recipe captures
+		// the output of `cd ... && pwd`, so that extra line used to make every
+		// message file look as if it were outside the git directory.
+		const { repo, hook } = await repoWithHook();
+		const env = { ...cleanEnv(), CDPATH: `.:${repo}` };
+		const message = join(repo, ".git/COMMIT_EDITMSG");
+
+		writeFileSync(message, CLEAN);
+		const passed = await run(repo, [hook, message], env);
+		expect(passed.exitCode).toBe(0);
+
+		writeFileSync(message, leaky());
+		const blocked = await run(repo, [hook, message], env);
+		expect(blocked.output).toContain(LEAK);
+		expect(blocked.exitCode).not.toBe(0);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"commit-msg refuses a symbolic link standing in for the message file",
+	async () => {
+		// Git writes message files itself and never as links. A link inside
+		// .git pointing at a clean file elsewhere is not the message.
+		const { repo, hook } = await repoWithHook();
+		mkdirSync(join(repo, "notes"));
+		writeFileSync(join(repo, "notes/clean.txt"), CLEAN);
+		const link = join(repo, ".git/LINKED_MSG");
+		symlinkSync(join(repo, "notes/clean.txt"), link);
+		const result = await run(repo, [hook, link]);
+		expect(result.output).toContain("does not name a regular file");
+		expect(result.exitCode).not.toBe(0);
+	},
+	SLOW,
+);

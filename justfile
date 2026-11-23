@@ -65,11 +65,13 @@ secrets-staged:
 # environment rather than the file git is about to commit. For the same
 # reason the path must be a regular file inside the git directory, which is
 # where git keeps every commit message file, linked worktrees included.
+# CDPATH is unset for the comparison because with it set `cd` prints the
+# directory it chose, which would end up in the captured path.
 secrets-message:
     @test -f .lefthook/rc.sh || { echo "secrets-message: .lefthook/rc.sh is missing, so the message file cannot be identified" >&2; exit 1; }
     @test -n "${HOOK_ARG_1:-}" || { echo "secrets-message: HOOK_ARG_1 is not set; this recipe runs from the commit-msg hook" >&2; exit 1; }
-    @test -f "$HOOK_ARG_1" || { echo "secrets-message: HOOK_ARG_1 does not name a regular file" >&2; exit 1; }
-    @dir="$(cd "$(dirname -- "$HOOK_ARG_1")" && pwd -P)"; common="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"; case "$dir/" in "$common"/*) ;; *) echo "secrets-message: HOOK_ARG_1 is outside the git directory, so it is not a commit message file" >&2; exit 1 ;; esac
+    @test -f "$HOOK_ARG_1" && ! test -L "$HOOK_ARG_1" || { echo "secrets-message: HOOK_ARG_1 does not name a regular file" >&2; exit 1; }
+    @unset CDPATH; dir="$(cd -- "$(dirname -- "$HOOK_ARG_1")" && pwd -P)"; common="$(cd -- "$(git rev-parse --git-common-dir)" && pwd -P)"; case "$dir/" in "$common"/*) ;; *) echo "secrets-message: HOOK_ARG_1 is outside the git directory, so it is not a commit message file" >&2; exit 1 ;; esac
     gitleaks stdin --no-banner --redact < "$HOOK_ARG_1"
 
 # The fast gate: what the pre-push hook always runs
