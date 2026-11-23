@@ -4,11 +4,12 @@ One row per completed capstone review: an adversarial review of committed code b
 peer, with every finding measured by the driver before it was fixed. The range's right-hand
 commit is the one that was reviewed and confirmed.
 
-| Date       | Range                                                  | Rounds | Verdict                               | Evidence                                                                                                              |
-| ---------- | ------------------------------------------------------ | ------ | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| 2026-11-23 | 1832d1e..8233938 (toolchain scaffold)                  | 5      | ALIGNED, GREEN confirmed by the owner | Fold commits 78bbe87, e5fc0ff, d814313, 69148e5, 8233938. Round 5 was clean and narrowed to 8233938.                  |
-| 2026-11-23 | 54cfa2a..b060561 (toolchain tests and their placement) | 5      | ALIGNED, GREEN confirmed by the owner | Fold commits bcb9065, 941ddee, 5dbe7c7, b060561; placement commit 2363944. Round 5 was clean and narrowed to b060561. |
-| 2026-11-23 | 8248cb5..b7020c6 (second-audit tests)                  | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit b7020c6; docs-only follow-up 9e22619. Round 2 found no defect in the test code.                           |
+| Date       | Range                                                                    | Rounds | Verdict                               | Evidence                                                                                                              |
+| ---------- | ------------------------------------------------------------------------ | ------ | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| 2026-11-23 | 1832d1e..8233938 (toolchain scaffold)                                    | 5      | ALIGNED, GREEN confirmed by the owner | Fold commits 78bbe87, e5fc0ff, d814313, 69148e5, 8233938. Round 5 was clean and narrowed to 8233938.                  |
+| 2026-11-23 | 54cfa2a..b060561 (toolchain tests and their placement)                   | 5      | ALIGNED, GREEN confirmed by the owner | Fold commits bcb9065, 941ddee, 5dbe7c7, b060561; placement commit 2363944. Round 5 was clean and narrowed to b060561. |
+| 2026-11-23 | 8248cb5..b7020c6 (second-audit tests)                                    | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit b7020c6; docs-only follow-up 9e22619. Round 2 found no defect in the test code.                           |
+| 2026-11-23 | f78d7d8..4034060 (CODEOWNERS, SHA pins, commit-msg hook, local lefthook) | 4      | ALIGNED, GREEN confirmed by the owner | Fold commits 4f31e38, f3b6a52, 4034060 on top of 8dda991. Rounds 3 and 4 were clean.                                  |
 
 ## Notes for the 2026-11-23 review
 
@@ -46,3 +47,15 @@ commit is the one that was reviewed and confirmed.
 - Not covered by the clean round: the docs-only commit 9e22619 was made after it; round 2 was
   narrowed to the fix commit; a pull request that weakens the workflow and edits its tests
   together is stopped only by review and branch protection.
+
+## Notes for the 2026-11-23 review of the hardening changes
+
+- Findings: 7 across rounds 1 and 2, all reproduced. lefthook pastes hook arguments into
+  shell commands unescaped, so the first commit-msg hook could run a command hidden in a
+  directory name; two attempts at quoting failed under test. After a design consult the owner
+  chose to carry the path in an environment variable exported by `.lefthook/rc.sh`.
+  `bun run --bun lefthook` fell back to a lefthook on PATH, so the pin is now by path.
+- Round 3 was clean; one case the peer set aside (rc.sh missing plus a preset variable) was
+  reproduced and closed before round 4, which was also clean.
+- Not covered by the clean rounds: rounds 3 and 4 were narrowed to one commit each; CODEOWNERS
+  enforcement depends on branch protection, which is not set; not tested on macOS or Windows.
