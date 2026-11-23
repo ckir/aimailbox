@@ -5,9 +5,12 @@
  */
 import { afterAll, expect, test } from "bun:test";
 import {
+	chmodSync,
+	copyFileSync,
 	existsSync,
 	mkdirSync,
 	readFileSync,
+	rmSync,
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -111,13 +114,21 @@ test.concurrent(
 	SLOW,
 );
 
-// The generated hook also looks for /usr/bin/lefthook by absolute path, so the
-// missing-binary case can only be staged on a machine without that file.
-test.skipIf(existsSync("/usr/bin/lefthook")).concurrent(
+test.concurrent(
 	"an installed hook blocks the push when lefthook cannot be found",
 	async () => {
+		// `lefthook install` writes the path of the binary that ran it into the
+		// hook as a fallback. Install from a private copy and then delete it, so
+		// that neither that path nor PATH leads to lefthook.
 		const repo = await makeRepo();
-		await must(repo, ["lefthook", "install"]);
+		const lefthook = Bun.which("lefthook");
+		if (lefthook === null) throw new Error("lefthook is not on PATH");
+		const copy = join(makeDir(), "lefthook");
+		copyFileSync(lefthook, copy);
+		chmodSync(copy, 0o755);
+		await must(repo, [copy, "install"]);
+		rmSync(copy);
+
 		const path = binDirWith(["sh", "git", "uname", "tr", "sed"]);
 		const result = await run(
 			repo,
@@ -129,6 +140,7 @@ test.skipIf(existsSync("/usr/bin/lefthook")).concurrent(
 			cleanEnv({ PATH: path }),
 		);
 		expect(result.output).toContain("Can't find lefthook in PATH");
+		expect(result.output).toContain("Operation is aborted");
 		expect(result.exitCode).toBe(1);
 	},
 	SLOW,
