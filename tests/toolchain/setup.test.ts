@@ -5,13 +5,7 @@
  * dispatches to the hooks.
  */
 import { afterAll, expect, test } from "bun:test";
-import {
-	chmodSync,
-	existsSync,
-	mkdirSync,
-	symlinkSync,
-	writeFileSync,
-} from "node:fs";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	addRemote,
@@ -30,19 +24,17 @@ const TYPE_ERROR = 'export const n: number = "not a number";\n';
 
 /**
  * Run `just setup` in `repo` with the real tools, except `bun`, which is a
- * stub: the throwaway repository already has `node_modules`, and a real
- * `bun install` would write through that link into this project.
+ * stub placed first on PATH: the throwaway repository already has
+ * `node_modules`, and a real `bun install` would write through that link into
+ * this project. The rest of PATH is kept, so tools that are wrapper scripts
+ * still find what they need.
  */
 async function setUp(repo: string): Promise<void> {
 	const bin = makeDir();
-	for (const name of ["bash", "just", "git", "lefthook", "gitleaks", "sh"]) {
-		const target = Bun.which(name);
-		if (target === null) throw new Error(`${name} is not on PATH`);
-		symlinkSync(target, join(bin, name));
-	}
 	writeFileSync(join(bin, "bun"), "#!/bin/sh\nexit 0\n");
 	chmodSync(join(bin, "bun"), 0o755);
-	await must(repo, ["just", "setup"], cleanEnv({ PATH: bin }));
+	const path = `${bin}:${process.env.PATH ?? ""}`;
+	await must(repo, ["just", "setup"], cleanEnv({ PATH: path }));
 }
 
 test.concurrent(

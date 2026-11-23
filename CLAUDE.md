@@ -44,7 +44,7 @@ Use [gitleaks](https://github.com/gitleaks/gitleaks) to keep secrets out of this
 
 ## Tests
 
-- `just test` runs every test except the toolchain suite. Product tests live next to the code in `src/`. A bare `bun test` runs everything, toolchain suite included.
+- `just test` runs every test except the toolchain suite. Product tests live next to the code in `src/`. `tests/gate/` holds fast tests of the CI workflow file; they run here, and so in `check-fast`, so that a change to the workflow cannot skip them. A bare `bun test` runs everything, toolchain suite included.
 - `just test-toolchain` runs `tests/toolchain/`, which tests the tooling itself: each test builds a throwaway git repository with a copy of the justfile, hook and config files plus a fixed two-file fixture, and proves a gate blocks what it should (a secret in each place the scan looks, a type error, a lint error, hostile file names and remote URLs). It takes about 30 seconds.
 - When you change `justfile`, `lefthook.yml`, `.lefthook/`, `tsconfig.json` or `biome.json`, run `just test-toolchain`. If you add or loosen a gate, add or update a test there, and check the test fails when the gate is removed.
 - The suite copies the files listed in `TOOLCHAIN_FILES` (`tests/toolchain/helpers.ts`). A new config file that a tool reads automatically (for example `.gitleaks.toml` or `bunfig.toml`) is not covered until it is added there and to the `toolchain-tests` glob in `lefthook.yml`.

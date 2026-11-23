@@ -19,9 +19,10 @@ Conventions: the newest row goes at the bottom, and a `|` inside a cell is writt
 - Round 2 found seven gaps in that suite: the CI workflow, `just setup` installing the hooks,
   type-check coverage of `tests/`, pre-commit staging of fixes, pre-commit on commits with no
   file Biome checks, three more TypeScript options, and two Biome settings. The owner scoped
-  all seven; they were closed with test code only.
-- Every gap was verified first by a mutant that left the suite green, and every new test was
-  shown to fail under a mutant of the gate it pins.
+  all seven; they were closed with test code, plus one line of `CLAUDE.md`.
+- Every gap was verified first by a mutant that left the suite green, and for every gap at
+  least one of its new tests was then shown to fail under that mutant. Tests that only assert
+  a clean project passes, and some of the CI workflow assertions, were not mutated one by one.
 - Discarded below the floor: `just fmt` has no test (a convenience recipe; `just lint` is the
   gate); static `package.json` fields have no test (no logic).
 - Not examined: the suite on Windows or with git older than 2.32; behaviour of the pinned

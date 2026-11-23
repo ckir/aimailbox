@@ -2,10 +2,15 @@
  * Pins the lines of the CI workflow that make it the authoritative gate. The
  * workflow cannot be run locally, so these read the file: they catch an edit
  * that quietly weakens it, not a fault in GitHub Actions itself.
+ *
+ * This file lives outside tests/toolchain/ on purpose. It is fast, so it runs
+ * in `just test` and therefore in `check-fast`: a pull request that downgrades
+ * the workflow to the fast gate still runs it, and fails.
  */
 import { expect, test } from "bun:test";
-import { join } from "node:path";
-import { repoRoot } from "./helpers.ts";
+import { join, resolve } from "node:path";
+
+const repoRoot = resolve(import.meta.dir, "../..");
 
 interface Step {
 	name?: string;
@@ -100,13 +105,27 @@ test("CI pins the version of every tool it installs", async () => {
 	);
 });
 
-test("CI verifies the checksum of each binary it downloads", async () => {
+test("CI downloads each binary at its pinned version and verifies its checksum", async () => {
 	const all = await steps();
-	for (const name of ["Install gitleaks", "Install lefthook"]) {
+	for (const [name, variable] of [
+		["Install gitleaks", "GITLEAKS_VERSION"],
+		["Install lefthook", "LEFTHOOK_VERSION"],
+	] as const) {
 		const step = all.find((candidate) => candidate.name === name);
-		expect({ name, run: step?.run ?? "" }).toEqual({
+		const script = step?.run ?? "";
+		// The shell form of the pinned version, as the download URL uses it.
+		const reference = `\${${variable}}`;
+		expect({ name, usesPin: script.includes(reference) }).toEqual({
 			name,
-			run: expect.stringContaining("sha256sum -c"),
+			usesPin: true,
+		});
+		expect({ name, script }).toEqual({
+			name,
+			script: expect.stringContaining("sha256sum -c"),
+		});
+		expect({ name, script }).toEqual({
+			name,
+			script: expect.not.stringContaining("latest"),
 		});
 	}
 });
