@@ -42,6 +42,13 @@ Use [gitleaks](https://github.com/gitleaks/gitleaks) to keep secrets out of this
 - `just secrets` scans the history of the current commit (patches, merge commits and commit messages) plus staged and unstaged changes to tracked files; the pre-commit hook scans staged changes. Other branches and stashes are not scanned.
 - gitleaks is a standalone binary, not a dev dependency. Install it before committing: the hook fails if it is missing.
 
+## Tests
+
+- `bun test` (or `just test`) runs everything. Product tests live next to the code in `src/`.
+- `tests/toolchain/` tests the tooling itself: each test builds a throwaway git repository with a copy of the justfile, hook and config files and proves a gate blocks what it should (a secret in each place the scan looks, a type error, a lint error, hostile file names and remote URLs).
+- When you change `justfile`, `lefthook.yml`, `.lefthook/`, `tsconfig.json` or `biome.json`, run the toolchain tests. If you add or loosen a gate, add or update a test there, and check the test fails when the gate is removed.
+- Test secrets are generated at run time (`fakeToken()` in `tests/toolchain/helpers.ts`). Never commit a token-shaped literal, even a fake one: the secret scan will reject it.
+
 ## Checks and CI
 
 - `just setup` installs dependencies and git hooks on a fresh clone.
