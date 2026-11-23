@@ -30,10 +30,11 @@ test:
 # Scan for secrets: staged changes, then the full git history, then unstaged
 # changes to tracked files. Untracked files are scanned once they are staged.
 # `-m` makes git show merge commits as patches; without it, content added in a
-# merge commit is never scanned. The diff filter skips deletions and unmerged,
+# merge commit is never scanned. Stashes are excluded: they are local merge
+# commits that are never pushed. The diff filter skips deletions and unmerged,
 # unknown and broken entries.
 secrets: secrets-staged
-    gitleaks git --log-opts="--all --full-history -m --diff-filter=uxdb" --no-banner --redact .
+    gitleaks git --log-opts="--exclude=refs/stash --all --full-history -m --diff-filter=uxdb" --no-banner --redact .
     gitleaks git --pre-commit --no-banner --redact .
 
 # Scan only staged changes for secrets (used by the pre-commit hook)
