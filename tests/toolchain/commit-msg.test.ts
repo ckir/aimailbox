@@ -268,3 +268,90 @@ test.concurrent(
 	},
 	SLOW,
 );
+
+test.concurrent(
+	"just secrets-message refuses a file reached through a linked directory inside .git",
+	async () => {
+		// .git/escape is a link to a directory outside the git directory. Only
+		// the resolved location counts.
+		const repo = await makeRepo();
+		mkdirSync(join(repo, "notes"));
+		writeFileSync(join(repo, "notes/clean.txt"), CLEAN);
+		symlinkSync(join(repo, "notes"), join(repo, ".git/escape"));
+		const result = await run(repo, ["just", "secrets-message"], {
+			...cleanEnv(),
+			HOOK_ARG_1: join(repo, ".git/escape/clean.txt"),
+		});
+		expect(result.output).toContain("outside the git directory");
+		expect(result.exitCode).toBe(1);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"just secrets-message refuses a file in a directory whose name only starts with .git",
+	async () => {
+		const repo = await makeRepo();
+		mkdirSync(join(repo, ".git-other"));
+		const elsewhere = join(repo, ".git-other/clean.txt");
+		writeFileSync(elsewhere, CLEAN);
+		const result = await run(repo, ["just", "secrets-message"], {
+			...cleanEnv(),
+			HOOK_ARG_1: elsewhere,
+		});
+		expect(result.output).toContain("outside the git directory");
+		expect(result.exitCode).toBe(1);
+	},
+	SLOW,
+);
+
+test.concurrent(
+	"git merge is blocked by a secret in the merge message and allowed without one",
+	async () => {
+		const { repo } = await repoWithHook();
+		await must(repo, ["git", "checkout", "--quiet", "-b", "side"]);
+		writeFileSync(join(repo, "note.txt"), "a note\n");
+		await must(repo, ["git", "add", "note.txt"]);
+		await must(repo, ["git", "commit", "--quiet", "-m", "add a note"]);
+		await must(repo, ["git", "checkout", "--quiet", "-"]);
+
+		const blocked = await run(repo, [
+			"git",
+			"merge",
+			"--no-ff",
+			"-m",
+			`merge side\n\nUploads use ${fakeToken()} for now.`,
+			"side",
+		]);
+		expect(blocked.output).toContain(LEAK);
+		expect(blocked.exitCode).not.toBe(0);
+		const parents = await must(repo, [
+			"git",
+			"rev-list",
+			"--parents",
+			"-1",
+			"HEAD",
+		]);
+		expect(parents.output.trim().split(" ").length).toBe(1);
+
+		await run(repo, ["git", "merge", "--abort"]);
+		const allowed = await run(repo, [
+			"git",
+			"merge",
+			"--no-ff",
+			"-m",
+			"merge side",
+			"side",
+		]);
+		expect(allowed.exitCode).toBe(0);
+		const merged = await must(repo, [
+			"git",
+			"rev-list",
+			"--parents",
+			"-1",
+			"HEAD",
+		]);
+		expect(merged.output.trim().split(" ").length).toBe(3);
+	},
+	SLOW,
+);

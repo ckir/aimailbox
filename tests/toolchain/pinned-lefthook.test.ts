@@ -12,6 +12,7 @@ import {
 	makeDir,
 	makeRepo,
 	must,
+	repoRoot,
 	run,
 	SLOW,
 } from "./helpers.ts";
@@ -92,3 +93,12 @@ test.concurrent(
 	},
 	SLOW,
 );
+
+test("package.json pins lefthook to one exact version", async () => {
+	// A range such as ^2.1.17 would let a new release change what the hooks
+	// run without a change to this repository.
+	const manifest = (await Bun.file(join(repoRoot, "package.json")).json()) as {
+		devDependencies?: Record<string, string>;
+	};
+	expect(manifest.devDependencies?.lefthook).toMatch(/^\d+\.\d+\.\d+$/);
+});

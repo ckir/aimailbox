@@ -134,3 +134,60 @@ test("CI downloads each binary at its pinned version and verifies its checksum",
 		});
 	}
 });
+
+test("nothing in the CI job lets a failing step pass or be skipped", async () => {
+	const workflow = (await loadWorkflow()) as unknown as {
+		jobs: Record<string, Record<string, unknown>>;
+	};
+	const job = workflow.jobs.check ?? {};
+	expect(job["continue-on-error"]).toBeUndefined();
+	expect(job.if).toBeUndefined();
+	for (const step of (await steps()) as Record<string, unknown>[]) {
+		const label = step.name ?? step.uses;
+		expect({ label, value: step["continue-on-error"] }).toEqual({
+			label,
+			value: undefined,
+		});
+		expect({ label, value: step.if }).toEqual({ label, value: undefined });
+		expect({ label, value: step.shell }).toEqual({ label, value: undefined });
+	}
+});
+
+test("the CI job does not widen the workflow's read-only access", async () => {
+	const workflow = (await loadWorkflow()) as unknown as {
+		jobs: Record<string, { permissions?: unknown }>;
+	};
+	for (const [name, job] of Object.entries(workflow.jobs)) {
+		expect({ name, permissions: job.permissions }).toEqual({
+			name,
+			permissions: undefined,
+		});
+	}
+});
+
+test("no CI script swallows a failing command", async () => {
+	// `|| true` after the checksum check, or `set +e`, would let a tampered
+	// download through. No script here needs `||` at all.
+	for (const step of await steps()) {
+		const script = step.run ?? "";
+		const label = step.name ?? step.uses;
+		expect({ label, script }).toEqual({
+			label,
+			script: expect.not.stringContaining("||"),
+		});
+		expect({ label, script }).toEqual({
+			label,
+			script: expect.not.stringMatching(/set\s+\+e|;\s*true\b/),
+		});
+	}
+	const install = (await steps()).find(
+		(step) => step.name === "Install gitleaks",
+	);
+	const checks = (install?.run ?? "")
+		.split("\n")
+		.map((line) => line.trim())
+		.filter((line) => line.includes("sha256sum -c"));
+	expect(checks.length).toBe(1);
+	expect(checks[0]).toMatch(/\| sha256sum -c -$/);
+	expect(checks[0]).not.toMatch(/^#/);
+});

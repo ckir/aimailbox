@@ -5,7 +5,13 @@
  * dispatches to the hooks.
  */
 import { afterAll, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import {
 	addRemote,
@@ -26,24 +32,51 @@ const TYPE_ERROR = 'export const n: number = "not a number";\n';
 
 /**
  * Run `just setup` in `repo` with the real tools, except that `bun install`
- * does nothing: the throwaway repository already has `node_modules`, and a
- * real install would write through that link into this project. A stand-in
- * `bun` placed first on PATH swallows `install` and passes every other
+ * installs nothing: the throwaway repository already has `node_modules`, and
+ * a real install would write through that link into this project. A stand-in
+ * `bun` placed first on PATH records `install` and passes every other
  * command to the real `bun`, which `setup` needs to run lefthook. The rest of
  * PATH is kept, so tools that are wrapper scripts still find what they need.
+ *
+ * Returns the file the stand-in writes: one line per `bun install`, saying
+ * whether the git hooks existed yet.
  */
-async function setUp(repo: string): Promise<void> {
+async function setUp(repo: string): Promise<string> {
 	const bin = makeDir();
+	const log = join(bin, "bun-install.log");
 	const realBun = Bun.which("bun");
 	if (realBun === null) throw new Error("bun is not on PATH");
 	writeFileSync(
 		join(bin, "bun"),
-		`#!/bin/sh\nif [ "$1" = install ]; then exit 0; fi\nexec "${realBun}" "$@"\n`,
+		[
+			"#!/bin/sh",
+			'if [ "$1" = install ]; then',
+			"  if [ -e .git/hooks/pre-commit ]; then hooks=present; else hooks=absent; fi",
+			`  echo "install hooks=$hooks" >> "${log}"`,
+			"  exit 0",
+			"fi",
+			`exec "${realBun}" "$@"`,
+			"",
+		].join("\n"),
 	);
 	chmodSync(join(bin, "bun"), 0o755);
 	const path = `${bin}:${process.env.PATH ?? ""}`;
 	await must(repo, ["just", "setup"], cleanEnv({ PATH: path }));
+	return log;
 }
+
+test.concurrent(
+	"just setup installs dependencies before it installs the hooks",
+	async () => {
+		// Without `bun install` a fresh clone has no node_modules, and so no
+		// lefthook for the hooks to run.
+		const repo = await makeRepo();
+		const log = await setUp(repo);
+		expect(existsSync(log)).toBe(true);
+		expect(readFileSync(log, "utf8")).toBe("install hooks=absent\n");
+	},
+	SLOW,
+);
 
 test.concurrent(
 	"just setup installs the pre-commit, commit-msg and pre-push hooks",
