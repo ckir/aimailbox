@@ -1,6 +1,7 @@
 /**
  * Pins the CODEOWNERS entries that route changes to the CI workflow, the
- * recipes and hooks, and the tests guarding them, to the owner. Like the
+ * recipes and hooks, the tool settings and pinned dependencies, and the tests
+ * guarding them, to the owner. Like the
  * workflow tests, this reads a file; whether GitHub enforces it depends on
  * branch protection.
  */
@@ -22,7 +23,7 @@ async function entries(): Promise<Map<string, string[]>> {
 	return result;
 }
 
-test("the CI workflow, the recipes, the hooks, their tests and CODEOWNERS each have an owner", async () => {
+test("the CI workflow, the recipes, the hooks, the tool settings, their tests and CODEOWNERS each have an owner", async () => {
 	const owned = await entries();
 	for (const path of [
 		"/.github/workflows/",
@@ -32,6 +33,10 @@ test("the CI workflow, the recipes, the hooks, their tests and CODEOWNERS each h
 		"/lefthook.yml",
 		"/.lefthook/",
 		"/tests/toolchain/",
+		"/package.json",
+		"/bun.lock",
+		"/biome.json",
+		"/tsconfig.json",
 	]) {
 		const owners = owned.get(path) ?? [];
 		expect({ path, hasOwner: owners.length > 0 }).toEqual({
@@ -84,6 +89,10 @@ test("no later CODEOWNERS rule takes a protected file away from its entry", asyn
 		[".lefthook/rc.sh", "/.lefthook/"],
 		[".lefthook/pre-push/check.sh", "/.lefthook/"],
 		["tests/toolchain/helpers.ts", "/tests/toolchain/"],
+		["package.json", "/package.json"],
+		["bun.lock", "/bun.lock"],
+		["biome.json", "/biome.json"],
+		["tsconfig.json", "/tsconfig.json"],
 	] as const) {
 		const last = rules.filter((rule) => matcher(rule)(file)).at(-1);
 		expect({ file, decidedBy: last }).toEqual({ file, decidedBy: entry });
