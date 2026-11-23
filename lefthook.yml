@@ -1,0 +1,19 @@
+# Git hooks. Install with `just setup` (or `lefthook install`).
+
+pre-commit:
+  jobs:
+    - name: biome
+      glob: "*.{js,jsx,ts,tsx,json,jsonc,css,md}"
+      run: bun run --bun biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      stage_fixed: true
+
+    - name: typecheck
+      run: just typecheck
+
+    - name: secrets
+      run: just secrets-staged
+
+pre-push:
+  jobs:
+    - name: check
+      run: just check
