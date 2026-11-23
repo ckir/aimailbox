@@ -44,16 +44,17 @@ Use [gitleaks](https://github.com/gitleaks/gitleaks) to keep secrets out of this
 
 ## Tests
 
-- `bun test` (or `just test`) runs everything. Product tests live next to the code in `src/`.
-- `tests/toolchain/` tests the tooling itself: each test builds a throwaway git repository with a copy of the justfile, hook and config files and proves a gate blocks what it should (a secret in each place the scan looks, a type error, a lint error, hostile file names and remote URLs).
-- When you change `justfile`, `lefthook.yml`, `.lefthook/`, `tsconfig.json` or `biome.json`, run the toolchain tests. If you add or loosen a gate, add or update a test there, and check the test fails when the gate is removed.
+- `just test` runs every test except the toolchain suite. Product tests live next to the code in `src/`. A bare `bun test` runs everything, toolchain suite included.
+- `just test-toolchain` runs `tests/toolchain/`, which tests the tooling itself: each test builds a throwaway git repository with a copy of the justfile, hook and config files plus a fixed two-file fixture, and proves a gate blocks what it should (a secret in each place the scan looks, a type error, a lint error, hostile file names and remote URLs). It takes about 15 seconds.
+- When you change `justfile`, `lefthook.yml`, `.lefthook/`, `tsconfig.json` or `biome.json`, run `just test-toolchain`. If you add or loosen a gate, add or update a test there, and check the test fails when the gate is removed.
+- The suite copies the files listed in `TOOLCHAIN_FILES` (`tests/toolchain/helpers.ts`). A new config file that a tool reads automatically (for example `.gitleaks.toml` or `bunfig.toml`) is not covered until it is added there and to the `toolchain-tests` glob in `lefthook.yml`.
 - Test secrets are generated at run time (`fakeToken()` in `tests/toolchain/helpers.ts`). Never commit a token-shaped literal, even a fake one: the secret scan will reject it.
 
 ## Checks and CI
 
 - `just setup` installs dependencies and git hooks on a fresh clone.
-- `just check` runs typecheck, lint, tests and the secret scan. Run it before declaring work done.
-- pre-commit runs Biome on staged files, the type check and the staged secret scan; pre-push runs `just check`.
-- GitHub Actions (`.github/workflows/ci.yml`) runs `just check` on pushes to `main` and on pull requests. Add new checks as `just` recipes under `check` so hooks and CI pick them up.
+- `just check` is the full gate: `check-fast` (typecheck, lint, `just test`, secret scan) plus `just test-toolchain`. Run it before declaring work done. `just check-fast` is the quick version for the inner loop.
+- pre-commit runs Biome on staged files, the type check and the staged secret scan. pre-push always runs `just check-fast`, and also runs `just test-toolchain` when the push touches a file that suite tests.
+- GitHub Actions (`.github/workflows/ci.yml`) runs `just check` on pushes to `main` and on pull requests. Add a new check as a `just` recipe under `check-fast` so the hook and CI both pick it up; a recipe added only under `check` runs in CI but not on push.
 - CI is the authoritative gate. The hooks are fast local feedback: they check the working tree, not the exact commit, so uncommitted or unstaged files can hide a problem in what is committed or pushed, and `--no-verify` skips them. Do not treat a passing hook as proof a commit is clean; commit or stash first and run `just check` when it matters.
 - `gitleaks:allow` comments are honoured, as the way to mark a false positive. Use them only for values that are not secrets.

@@ -15,7 +15,8 @@ Then:
 
 ```sh
 just setup   # install dependencies and git hooks
-just check   # type check, lint, tests and secret scan (what CI runs)
+just check        # everything CI runs: type check, lint, all tests, secret scan
+just check-fast   # the same without the slow toolchain tests
 ```
 
 Run `just` to list every recipe.

@@ -59,7 +59,7 @@ test.concurrent(
 		const repo = await makeRepo();
 		await addRemote(repo);
 		const result = await run(repo, ["lefthook", "run", "pre-push"]);
-		expect(result.output).not.toContain("(skip)");
+		expect(result.output).not.toContain("check (skip)");
 		expect(result.output).toContain("gitleaks git");
 		expect(result.exitCode).toBe(0);
 	},
