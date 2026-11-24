@@ -303,6 +303,6 @@ export function readPublishedNote(value: unknown): ReadResult<PublishedNote> {
 		(WARNING_TAGS as readonly string[]).includes(t),
 	);
 	// The first occurrence of each known tag is kept, later ones dropped.
-	out.warningTags = knownTags.filter((t, i) => knownTags.indexOf(t) === i);
+	out.warningTags = [...new Set(knownTags)];
 	return { status: "ok", value: out as PublishedNote, cleaned };
 }

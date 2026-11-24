@@ -129,3 +129,18 @@ test("note identifiers", () => {
 	expect(() => formatNoteId("cargo/serde_json", 1)).toThrow();
 	expect(() => formatNoteId("npm/a", 0)).toThrow();
 });
+
+test("npm refuses a leading dot on the package part only, not on the scope", () => {
+	for (const name of ["@.scope/pkg", "@./x", "@../x", "@.s./p."])
+		ok(`npm/${name}`, `npm/${name}`);
+	for (const name of [
+		"@scope/.pkg",
+		"@.s/.p",
+		"@s/..",
+		".hidden",
+		"..",
+		"@/.x",
+	])
+		bad(`npm/${name}`);
+	for (const name of ["@!/a", "@'/a", "@(/a", "@*/a"]) bad(`npm/${name}`); // legacy characters are refused in the scope too
+});

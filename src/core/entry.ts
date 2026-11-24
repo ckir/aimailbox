@@ -212,7 +212,7 @@ function parseTags(raw: unknown, strict: boolean): WarningTag[] {
 	const present = (raw as string[]).filter(known);
 	if (strict && present.length !== raw.length) throw new Fault("unknown-tag");
 	// Lenient: the first occurrence of each known tag is kept, later ones dropped.
-	const tags = present.filter((t, i) => present.indexOf(t) === i);
+	const tags = [...new Set(present)];
 	if (strict && tags.length !== present.length) throw new Fault("bad-tags");
 	return tags;
 }

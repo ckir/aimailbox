@@ -140,10 +140,13 @@ export function rowKey(ecosystem: Ecosystem, version: string): string {
 }
 
 /**
- * The version a table row carries: the row key when that key is itself a valid
- * 12.1 version that rowKey leaves unchanged, otherwise the version exactly as written.
+ * The version a table row carries: the row key when the version is valid under
+ * 12.1 and that key is itself valid and left unchanged by rowKey, otherwise the
+ * version exactly as written. An invalid version is never repaired (12.1 refuses
+ * it, it does not trim it), so "v" plus 64 valid characters stays as written.
  */
 export function rowVersion(ecosystem: Ecosystem, version: string): string {
+	if (!isValidVersion(version)) return version;
 	const key = rowKey(ecosystem, version);
 	return isValidVersion(key) && rowKey(ecosystem, key) === key ? key : version;
 }

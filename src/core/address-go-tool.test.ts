@@ -175,3 +175,54 @@ test("the stray-character rule applies to the tool prefix only", () => {
 		value: "tool/github.com/org/repo",
 	});
 });
+
+const DEL = String.fromCharCode(127);
+test("the stray-character rule keeps the order of the other checks", () => {
+	const err = (input: string, error: string) =>
+		expect<unknown>(canonicalise(input)).toEqual({ ok: false, error });
+	err("gem/a b", "unknown-prefix"); // the prefix is judged first
+	err(`gem/a${NUL}b`, "unknown-prefix");
+	err(`npm/${"a".repeat(1100)}é`, "too-long"); // the raw length is judged first
+	err(`tool/github.com/${"a".repeat(1100)}é`, "too-long");
+	err(`npm/left${NUL}pad`, "bad-name");
+	err(`pypi/left${NUL}pad`, "bad-name");
+	err("npm/café", "bad-name");
+});
+test("DEL is outside printable ASCII in every part of a tool name", () => {
+	bad(`tool/github.com/org/re${DEL}po`);
+	bad(`tool/https://github.com/org/repo?x=${DEL}`); // query
+	bad(`tool/https://github.com/org/repo#${DEL}`); // fragment
+	bad(`tool/https://a${DEL}@github.com/org/repo`); // credentials
+	bad(`tool/a${DEL}@github.com:org/repo`); // remote user
+	bad(`tool/github.com/org/repo${DEL}`);
+});
+test("the first and last printable ASCII characters are judged by the element rules, not the charset rule", () => {
+	ok("tool/github.com/org/a~b", "tool/github.com/org/a~b"); // U+007E is an element character
+	bad("tool/github.com/org/a!b"); // U+0021 is not
+	bad("tool/github.com/org/!");
+	ok("tool/https://github.com/org/repo?x=!", "tool/github.com/org/repo"); // allowed in a discarded query
+	ok("tool/https://github.com/org/repo?x=~", "tool/github.com/org/repo");
+	ok("tool/https://github.com/org/repo#!~", "tool/github.com/org/repo");
+	ok("tool/https://!~@github.com/org/repo", "tool/github.com/org/repo"); // credentials
+	ok("tool/!~@github.com:org/repo", "tool/github.com/org/repo"); // remote user
+});
+
+test("a final element is a version only when it is v plus digits and dots", () => {
+	for (const e of ["v1.x", "v8.dev", "v2.dev", "v", "vx", "v1x", "av1.2"])
+		ok(`go/example.com/x/${e}`, `go/example.com/x/${e}`);
+	ok("go/example.com/v8.dev", "go/example.com/v8.dev");
+	for (const e of ["v.2", "v2.", "v.", "v1.2", "v..", "v.2.3", "v0.1"])
+		bad(`go/example.com/x/${e}`);
+	ok("go/example.com/x/v8.dev/v3", "go/example.com/x/v8.dev"); // v8.dev is not a version element
+	bad("go/example.com/x/v.2/v3");
+});
+test("gopkg.in drops -unstable with the version and refuses a bare .v", () => {
+	ok("go/gopkg.in/yaml.v2-unstable", "go/gopkg.in/yaml");
+	ok("go/gopkg.in/user/pkg.v3-unstable", "go/gopkg.in/user/pkg");
+	ok("go/gopkg.in/yaml.v-unstable", "go/gopkg.in/yaml");
+	bad("go/gopkg.in/yaml.v");
+	bad("go/gopkg.in/yaml.v0-unstable");
+	bad("go/gopkg.in/yaml.v02-unstable");
+	bad("go/gopkg.in/yaml.v2.1-unstable");
+	bad("go/gopkg.in/yaml.v2.v3-unstable");
+});

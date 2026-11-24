@@ -237,3 +237,36 @@ test("versionsEqual is false for versions that are not valid, even where the tex
 	expect(versionsEqual("tool", "v1", "1")).toBe(true); // valid, unorderable: unchanged
 	expect(versionsEqual("tool", "abc", "abc")).toBe(true);
 });
+
+test("versionsEqual is false for each invalid pair, even where the text is equal", () => {
+	const sixtyFour = "1".repeat(64);
+	for (const ecosystem of ["npm", "tool"] as const) {
+		expect(versionsEqual(ecosystem, "1.2 3", "1.2 3")).toBe(false);
+		expect(versionsEqual(ecosystem, "1".repeat(65), "1".repeat(65))).toBe(
+			false,
+		);
+		expect(versionsEqual(ecosystem, sixtyFour, `v${sixtyFour}`)).toBe(false); // a valid version against its invalid twin
+		expect(versionsEqual(ecosystem, `v${sixtyFour}`, sixtyFour)).toBe(false);
+		expect(versionsEqual(ecosystem, "", "v")).toBe(false);
+		expect(versionsEqual(ecosystem, "v", "")).toBe(false);
+	}
+	expect(versionsEqual("npm", sixtyFour, sixtyFour)).toBe(true);
+});
+test("versionsEqual is true for a valid pair that cannot be ordered", () => {
+	expect(versionsEqual("pypi", "2024.1", "v2024.1")).toBe(true);
+	expect(versionsEqual("tool", "nightly", "vnightly")).toBe(true);
+	expect(versionsEqual("go", "latest", "latest")).toBe(true);
+	expect(versionsEqual("npm", "1.2", "v1.2")).toBe(true);
+});
+test("rowVersion does not repair an invalid version", () => {
+	const sixtyFiveInvalid = `v1.0.0-${"a".repeat(58)}`; // "v" plus 64 valid characters
+	expect(sixtyFiveInvalid.length).toBe(65);
+	expect(isValidVersion(sixtyFiveInvalid)).toBe(false);
+	expect(rowVersion("npm", sixtyFiveInvalid)).toBe(sixtyFiveInvalid);
+	expect(rowVersion("tool", `v${"1".repeat(64)}`)).toBe(`v${"1".repeat(64)}`);
+	expect(rowVersion("npm", "1.2 3")).toBe("1.2 3");
+	expect(rowVersion("npm", "")).toBe("");
+	expect(rowVersion("npm", `v1.0.0-${"a".repeat(57)}`)).toBe(
+		`1.0.0-${"a".repeat(57)}`,
+	); // 64 characters, valid: the leading v is still removed
+});

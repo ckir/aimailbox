@@ -340,3 +340,53 @@ test("an invalid installed version is never the same version as a recorded one",
 		"same-version",
 	);
 });
+
+test("mark 3 counts non-burst votes: a burst of confirmations does not hide a dispute, a burst of denials does not make one", () => {
+	const rowOf = (
+		confirmTotal: number,
+		confirmNonBurst: number,
+		doesNotReproduceTotal: number,
+		doesNotReproduceNonBurst: number,
+	) =>
+		problemEntry({
+			reportedVersion: "2.0.0",
+			rows: [
+				{
+					version: "2.0.0",
+					confirmTotal,
+					confirmNonBurst,
+					doesNotReproduceTotal,
+					doesNotReproduceNonBurst,
+				},
+			],
+		});
+	expect(markEntry("npm", rowOf(5, 0, 1, 1), "2.0.0")).toBe(
+		"disputed-on-your-version",
+	);
+	expect(markEntry("npm", rowOf(1, 1, 5, 1), "2.0.0")).toBe("same-version"); // equal non-burst counts
+	expect(markEntry("npm", rowOf(1, 1, 5, 0), "2.0.0")).toBe("same-version");
+});
+test("an installed version that is not valid never equals the same text", () => {
+	const tooLong = "1".repeat(65);
+	const same = (ecosystem: "npm" | "tool", version: string) =>
+		markEntry(ecosystem, problemEntry({ reportedVersion: version }), version);
+	for (const ecosystem of ["npm", "tool"] as const) {
+		expect(same(ecosystem, "1.2 3")).toBe("unknown");
+		expect(same(ecosystem, tooLong)).toBe("unknown");
+		expect(
+			markEntry(
+				ecosystem,
+				problemEntry({ reportedVersion: "1".repeat(64) }),
+				`v${"1".repeat(64)}`,
+			),
+		).toBe("unknown"); // a valid version against its invalid twin
+		expect(
+			markEntry(ecosystem, problemEntry({ reportedVersion: "v" }), ""),
+		).toBe("unknown");
+		const resolved = problemEntry({
+			resolved: { time: T0 + 1000, version: tooLong },
+		});
+		expect(markEntry(ecosystem, resolved, tooLong)).toBe("unknown");
+	}
+	expect(same("tool", "nightly")).toBe("same-version"); // valid and unorderable: equal text counts
+});

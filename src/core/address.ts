@@ -32,15 +32,18 @@ function npmName(name: string): string | undefined {
 	if (name.startsWith("@")) {
 		if (parts.length !== 2) return undefined;
 		const [scope, bare] = parts as [string, string];
-		return npmPart(scope.slice(1)) && npmPart(bare) ? name : undefined;
+		// Only the package part may not start with a dot; the scope may.
+		return npmPart(scope.slice(1)) && npmPart(bare) && !bare.startsWith(".")
+			? name
+			: undefined;
 	}
 	if (parts.length !== 1 || name.startsWith("-") || name.startsWith("_"))
 		return undefined;
-	return npmPart(name) ? name : undefined;
+	return npmPart(name) && !name.startsWith(".") ? name : undefined;
 }
 
 function npmPart(part: string): boolean {
-	return NPM_PART.test(part) && !part.startsWith(".");
+	return NPM_PART.test(part);
 }
 
 function pypiName(name: string): string | undefined {
@@ -62,9 +65,13 @@ const GO_ELEMENT = /^[A-Za-z0-9._~-]+$/;
 const GO_HOST = /^[a-z0-9.-]+$/;
 const GO_VERSION_SUFFIX = /\.v[0-9]+(\..*)?$/;
 const GO_ALLOWED_SUFFIX = /^\.v(0|[1-9][0-9]*)$/;
+const GO_UNSTABLE = "-unstable";
 const GO_MAJOR_ELEMENT = /^v[1-9][0-9]*$/;
-const GO_REFUSED_FINAL = /^(v0|v1|v0[0-9]+|v[0-9]+\..*)$/;
-const GO_ANY_VERSION_ELEMENT = /^v[0-9]+(\..*)?$/;
+// A final element is a version, in the sense of SplitPathVersion, when it is
+// "v" followed only by digits and dots. Of those, /vN for N >= 2 is the one
+// major version element; v0, v1, v0N and any with a dot (v1.2, v.2, v2.) are
+// refused. An element such as v1.x or v8.dev is an ordinary element.
+const GO_REFUSED_FINAL = /^(v0|v1|v0[0-9]+|v[0-9.]*\.[0-9.]*)$/;
 
 function goElement(element: string): boolean {
 	if (!GO_ELEMENT.test(element)) return false;
@@ -84,11 +91,22 @@ function goName(name: string): string | undefined {
 	if (host === "gopkg.in") {
 		if (elements.length < 2 || elements.length > 3) return undefined;
 		const last = elements[elements.length - 1] as string;
-		const found = GO_VERSION_SUFFIX.exec(last);
+		// "-unstable" after the version goes with it, as in SplitPathVersion.
+		const unstable = last.endsWith(GO_UNSTABLE);
+		const core = unstable ? last.slice(0, -GO_UNSTABLE.length) : last;
+		const found = GO_VERSION_SUFFIX.exec(core);
 		if (found !== null) {
-			if (!GO_ALLOWED_SUFFIX.test(found[0])) return undefined;
-			const bare = last.slice(0, found.index);
+			// SplitPathVersion refuses ".v0-unstable" too (a leading zero).
+			if (!GO_ALLOWED_SUFFIX.test(found[0]) || (unstable && found[0] === ".v0"))
+				return undefined;
+			const bare = core.slice(0, found.index);
 			if (!goElement(bare) || /\.v[0-9]+$/.test(bare)) return undefined;
+			elements[elements.length - 1] = bare;
+		} else if (core.endsWith(".v")) {
+			// ".v" with no digits counts as a version only in front of "-unstable".
+			const bare = core.slice(0, -2);
+			if (!unstable || !goElement(bare) || /\.v[0-9]+$/.test(bare))
+				return undefined;
 			elements[elements.length - 1] = bare;
 		}
 	} else if (elements.length >= 2) {
@@ -97,7 +115,12 @@ function goName(name: string): string | undefined {
 		if (GO_MAJOR_ELEMENT.test(last)) {
 			elements.pop();
 			const next = elements[elements.length - 1] as string;
-			if (elements.length >= 2 && GO_ANY_VERSION_ELEMENT.test(next))
+			// What is left must not itself be a version element, or it would
+			// canonicalise again to something else.
+			if (
+				elements.length >= 2 &&
+				(GO_MAJOR_ELEMENT.test(next) || GO_REFUSED_FINAL.test(next))
+			)
 				return undefined;
 		}
 	}
