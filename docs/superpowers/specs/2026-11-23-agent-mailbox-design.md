@@ -1,7 +1,8 @@
 # Agent mailbox: design
 
 Date: 2026-11-23
-Status: APPROVED by the owner on 2026-11-24 ("I approve"), revision 7 (after two builder checks, six panel rounds, the
+Status: APPROVED by the owner on 2026-11-24 ("I approve"), revision 7 (revision 8 of the same day
+changes 6.2, 7.1, 12.3, 12.5 and section 15, see Appendix A) (after two builder checks, six panel rounds, the
 last of them clean, a seventh decision, and four agreement rounds on what the second builder check found). All seven design decisions were agreed point by point by the two reviewing agents
 and approved by the owner. The approval answered a hand-over that asked about four points:
 which way decision 7 is resolved, a ceiling that tightens it (8.3), whether a further panel round
@@ -236,7 +237,17 @@ human confirmation (8.3 to 8.5).
    and path. Lowercasing is of ASCII letters only. Each prefix accepts only the characters its
    registry allows in a name (for `tool`: ASCII letters, digits, `.`, `-`, `_`, `~` and `/`),
    within a bounded length; anything else, an unknown prefix, an empty segment and a `.` or
-   `..` segment are rejected, never repaired. A bare `npm` name typed in the wrong case is
+   `..` segment are rejected, never repaired. The name rules follow each registry's own checks
+   (Appendix A) and are fixed from format version 1, because a different rule later would give
+   an existing note another box. In particular: an `npm` scope may start with `.` but a package
+   part may not; a name with `!`, `'`, `(`, `)` or `*`, which npm's legacy rules still allow,
+   has no box; a `go` final element is read as a major-version element only when it is `v`
+   followed by digits and dots (so `v8.dev` and `v1.x` are ordinary elements, and `v0` and `v1`
+   are refused); the last element of a `gopkg.in` path is read by one rule that removes `.vN`
+   and `-unstable` and is checked against its own result, so a name with an internal `.vN.word`
+   segment has no box and an unversioned `gopkg.in/<name>` is accepted; a `tool` host needs a
+   dot, so `localhost` and other dotless hosts have no box. The canonical form of an accepted
+   address is itself accepted and unchanged. A bare `npm` name typed in the wrong case is
    offered the existing boxes that differ only by case, and the client does not pick.
 8. A registry box and a `tool` box for the same thing may both exist until the alias file maps
    one address to the other. Alias resolution applies to box addresses and never rewrites an
@@ -260,7 +271,12 @@ human confirmation (8.3 to 8.5).
    followed by a line feed, and a lone carriage return, become one line feed; links stay inert
    text. Text is otherwise kept exactly as written and is not put into a Unicode normal form.
    The forbidden characters are exactly those in the Unicode general categories Cc (except
-   line feed and tab), Cf, Cs, Co, Cn, Zl and Zp; the line-end rule is applied first. The
+   line feed and tab), Cf, Cs, Co, Cn, Zl and Zp, and every code point with the Unicode property
+   Default_Ignorable_Code_Point (the fillers, variation selectors and similar code points that
+   print nothing and that those categories leave in: 267 code points in Unicode 17.0, among them
+   U+034F, U+115F and U+1160, U+3164, U+FE00 to U+FE0F, U+FFA0 and U+E0100 to U+E01EF, so the
+   emoji presentation selectors U+FE0E and U+FE0F are removed, as the joiner U+200D already is);
+   the line-end rule is applied first. The
    summary cap counts code points and a summary holds no line feed; every other cap counts
    bytes of UTF-8; a cut at a cap never splits a code point.
    Three rules say who does what:
@@ -768,7 +784,10 @@ name reach users inside the released client.
    list below.
    The service builds the table from the set of current counted votes, leaving out versions
    with no current vote; a client never drops rows. Rows are keyed by version as compared under
-   rule 4. When the table would exceed its bound, whole rows are dropped: first the rows whose
+   rule 4. A row's `version` field is that key, except where the key would not be a valid
+   version or would change when one more leading `v` is removed (a vote whose version is `v` or
+   `vv`): then the row carries the version as written, and a version that is invalid as written
+   is carried as written. The tie-break below compares the carried strings. When the table would exceed its bound, whole rows are dropped: first the rows whose
    version cannot be ordered, least recent first by the latest arrival among their current
    counted votes, ties broken by dropping first the version string that is lower in byte order; then the rows whose version can be
    ordered, oldest version first. In a box whose versions are never ordered every row is of
@@ -826,7 +845,7 @@ name reach users inside the released client.
 5. Order, computed in the client. Entries are sorted by these keys in turn:
    1. when the lookup has words: the number of distinct query words found in the note text the
       entry itself carries (warning tags and status labels excluded), more first. Matching is
-      case-insensitive, on whole words bounded by code points that are not Unicode letters or digits, over the normalised copy of 7.4.
+      case-insensitive, on whole words bounded by code points that are not Unicode letters or digits, over the normalised copy of 7.4. A combining mark is not a letter or a digit, so one inside a word splits it.
       That text is the summary and whichever short fixed fields the plan's layout puts in the
       entry. The free-text field is never in an entry and is matched only by a search in the
       service.
@@ -1032,9 +1051,36 @@ To the builder:
 - Order of work. The first plan covers only what can be written against code that exists: the
   package layout, the canonicalisation module (6.2), the note and digest formats with their
   validation (6, 7.1, 12.1, 12.2, 12.3, 14), the marking and ordering functions (12.4, 12.5),
-  and their tests.
+  and their tests. Plans after it, agreed by both agents on 2026-11-24, each shown to the owner
+  for approval: plan 2, a local-only slice (the scanner, the shared warning-tag rules, the draft
+  lock, the policy file and repository veto, the local store, version detection, the rendered
+  summaries, lookup and send over local notes only, setup and the always-on rule for both
+  harnesses; no network and no stranger's text), which ends with a period of real use on both
+  harnesses whose length and thresholds the owner approves (13.2) and which plan 3 waits for;
+  plan 3, trust and wire (the sender key, the offline root-key signing command, manifests, key
+  files, the catalogue and alias file, verification, the binding below, strict service-side
+  checks); plan 4, the service (databases, limits, vote and burst state, the breaker, static
+  publishing including the public pages, search, removal, snapshots, the admin command); plan 5,
+  the network client (fetching and verifying, the envelope, the confirmation and post-read rules,
+  the gate and the adapters, the session-start hook, the author line of 12.6); plan 6,
+  deployment and delivery (Caddy, systemd, the domain, the binaries and the Bun package).
+- Notes for the plan that signs format 1: bind each hashed file to its box address in the signed
+  manifest (no `box` field inside an entry or a note); strict service-side checks of the
+  per-note files and of the digest page wrapper; whether the reader refuses two rows whose
+  versions differ only by a leading `v` (the reader has no ecosystem, so it cannot today).
+- Note for plan 2: when a draft is saved because the policy denies sending, the client prints
+  the exact one-line command that allows sending from that directory, so the default deny of
+  8.4 has a short path to a scoped allow; the always-on rule and the output of lookup and send
+  are drafted and read by both agents before they are built.
+- Known limits of format version 1, accepted on 2026-11-24 and listed in the plan-1 ledger:
+  the address limits of 6.2 rule 7; the forbidden-character set follows Unicode 17.0 and the
+  categories and normal forms come from the runtime's own Unicode version (a client and a
+  service on different versions can disagree on a code point, which fails closed).
 
-Required checks at the source before the plan that depends on them:
+Required checks at the source before the plan that depends on them. Agreed timing, 2026-11-24:
+every harness check below (both Claude Code and Antigravity) before plan 2; SQLite removal
+and the Caddy observed address before plan 4; the Caddy size cap and logging and the systemd
+directives before plan 6:
 
 - Claude Code and Antigravity hook payloads, session variables, rule locations and how a hook
   forces the harness to ask its human (9.2, 9.3).
@@ -1048,7 +1094,10 @@ Required checks at the source before the plan that depends on them:
 - Done 2026-11-24, sources in Appendix A: which ecosystems follow strict semantic versioning
   (12.4), and each registry's naming rules behind 6.2 rule 7.
 
-To the owner:
+To the owner. Agreed timing, 2026-11-24: each item is asked when a plan needs it: the thresholds
+of 13.2 for local measurements at plan 2's review and the rest at plan 5's; root-key custody at
+plan 3's design; the removal contact, the response time, the moderation time and the provider's
+abuse terms at plan 4's review; the domain at plan 6.
 
 - The domain. At deployment an agent compares registrars' current offers and the owner buys.
 - A contact address for removal requests, and the response time stated on pages.
@@ -1380,6 +1429,27 @@ owner's reply, in full: "I approve". The author's reading, not the owner's words
 is approved; yes to 1, 2 and 4; no corrections under 5; on 3, no round was asked for, so none
 was run; 6 was a choice between two wordings and is not answered. The two lines above stay
 true: the last fold was not re-read by a reviewer, and revision 7's rules had no panel round.
+
+Revision 8, 2026-11-24, after the first plan was built and its capstone gate closed. The owner
+asked the two agents to agree on the decisions that follow ("Negotiate with agy my future
+decisions and present me a common agreed proposal") and approved six points ("I approve all
+six"). The revision changes what a reader or a writer accepts, so it is not editorial:
+
+- 7.1 forbids every code point with the Unicode property Default_Ignorable_Code_Point. Measured
+  on Bun 1.4.4 with Unicode 17.0: 267 such code points passed the former categories, and a
+  filler such as U+3164 inside a word kept it from matching the word under 7.4 and 12.5. No
+  note has been stored or signed, so nothing existing is affected; the code change lands at the
+  start of plan 2.
+- 6.2 rule 7 states the name rules as the first plan implements them after six capstone rounds
+  and a differential test against the registries' own code (npm validate-npm-package-name 8.0.0,
+  golang.org/x/mod 0.42.0), and freezes them for format version 1.
+- 12.3 states what a table row's `version` carries (the plan found that a vote whose version is
+  `v` made a row key that changed under a second removal of a `v`, so the page could not be read
+  back); 12.5 notes that a combining mark splits a word.
+- Section 15 records the plans after the first and when each owner item is asked, the notes for
+  the signing plan, the note for plan 2 about a path from deny to a scoped allow, and the
+  agreed timing of the source checks.
+  Not reviewed by a panel: the owner approved a read of the diff by the second agent instead.
 
 ## Stand-downs
 
