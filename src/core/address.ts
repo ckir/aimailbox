@@ -99,15 +99,24 @@ function goName(name: string): string | undefined {
 			// SplitPathVersion refuses ".v0-unstable" too (a leading zero).
 			if (!GO_ALLOWED_SUFFIX.test(found[0]) || (unstable && found[0] === ".v0"))
 				return undefined;
+			// What is left must be a plain element that is not itself a version
+			// (".v", ".v2") and carries no "-unstable", or the result would
+			// canonicalise again to something else. This is a leftmost match: Go
+			// accepts a name with an internal ".vN.word" segment such as
+			// "pkg.v2.foo.v3" and we refuse it. That over-refusal is known and parked.
 			const bare = core.slice(0, found.index);
-			if (!goElement(bare) || /\.v[0-9]+$/.test(bare)) return undefined;
-			elements[elements.length - 1] = bare;
-		} else if (core.endsWith(".v")) {
-			// ".v" with no digits counts as a version only in front of "-unstable".
-			const bare = core.slice(0, -2);
-			if (!unstable || !goElement(bare) || /\.v[0-9]+$/.test(bare))
+			if (
+				!goElement(bare) ||
+				bare.endsWith(GO_UNSTABLE) ||
+				/\.v[0-9]*$/.test(bare)
+			)
 				return undefined;
 			elements[elements.length - 1] = bare;
+		} else if (core.endsWith(".v")) {
+			// Go's splitGopkgIn accepts ".v-unstable", but the result fails
+			// module.Check and panics PathMajorPrefix, so no real package has such
+			// a name. Refused, with or without "-unstable".
+			return undefined;
 		}
 	} else if (elements.length >= 2) {
 		const last = elements[elements.length - 1] as string;

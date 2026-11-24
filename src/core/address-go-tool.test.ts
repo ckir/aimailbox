@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { canonicalise, isCanonical } from "./address.ts";
+import { canonicalise, ecosystemOf, isCanonical } from "./address.ts";
 
 const ok = (input: string, out: string) => {
 	expect<unknown>(canonicalise(input)).toEqual({ ok: true, value: out });
@@ -219,10 +219,92 @@ test("a final element is a version only when it is v plus digits and dots", () =
 test("gopkg.in drops -unstable with the version and refuses a bare .v", () => {
 	ok("go/gopkg.in/yaml.v2-unstable", "go/gopkg.in/yaml");
 	ok("go/gopkg.in/user/pkg.v3-unstable", "go/gopkg.in/user/pkg");
-	ok("go/gopkg.in/yaml.v-unstable", "go/gopkg.in/yaml");
+	bad("go/gopkg.in/yaml.v-unstable"); // round 3: no real package has this name
 	bad("go/gopkg.in/yaml.v");
 	bad("go/gopkg.in/yaml.v0-unstable");
 	bad("go/gopkg.in/yaml.v02-unstable");
 	bad("go/gopkg.in/yaml.v2.1-unstable");
 	bad("go/gopkg.in/yaml.v2.v3-unstable");
+});
+
+test("a gopkg.in name is refused or canonicalises to a fixed point", () => {
+	for (const p of [
+		"yaml.v2-unstable.v3",
+		"yaml.v.v2",
+		"yaml.v.v-unstable",
+		"yaml.v-unstable.v2",
+		"yaml.v0-unstable.v2",
+		"yaml.v2-unstable.v-unstable",
+		"yaml.v-unstable",
+		"yaml.v",
+		"yaml.v0-unstable",
+	])
+		bad(`go/gopkg.in/${p}`);
+	ok("go/gopkg.in/yaml.v2-unstable", "go/gopkg.in/yaml");
+	ok("go/gopkg.in/yaml.v2", "go/gopkg.in/yaml");
+	ok("go/gopkg.in/yaml", "go/gopkg.in/yaml");
+	ok("go/gopkg.in/yaml.v0", "go/gopkg.in/yaml");
+	ok("go/gopkg.in/pkg.v.foo.v2", "go/gopkg.in/pkg.v.foo");
+});
+test("what is left of a gopkg.in name must itself be a plain element", () => {
+	bad("go/gopkg.in/pkg..v2"); // the left part "pkg." is not an element
+	// Known over-refusal, parked: Go accepts an internal ".vN.word" segment,
+	// but the leftmost version match used here refuses it.
+	bad("go/gopkg.in/pkg.v2.foo.v3");
+});
+
+test("canonicalising a go name twice changes nothing, over a small grammar", () => {
+	const hosts = ["gopkg.in", "github.com", "v8.dev", "GitHub.com"];
+	const elements = [
+		"yaml",
+		"yaml.v2",
+		"yaml.v",
+		"yaml.v0",
+		"yaml.v2-unstable",
+		"yaml.v-unstable",
+		"yaml.v0-unstable",
+		"yaml.v2-unstable.1",
+		"yaml.v2.3",
+		"yaml.v.v2",
+		"yaml.v2.v3",
+		"yaml-unstable",
+		"v1",
+		"v2",
+		"v10",
+		"v0",
+		"v02",
+		"v1.x",
+		"v8.dev",
+		"v.2",
+		"v2.",
+		"v",
+		"a..b",
+		"go-yaml",
+		"con",
+		"a~1",
+		"-x",
+		"x.v3",
+		"x.v3-unstable",
+		"V2",
+	];
+	const paths: string[][] = [[]];
+	for (let depth = 0; depth < 3; depth++)
+		for (const path of paths.slice(paths.findIndex((p) => p.length === depth)))
+			for (const e of elements) paths.push([...path, e]);
+	let accepted = 0;
+	let calls = 0;
+	for (const host of hosts)
+		for (const path of paths) {
+			if (path.length === 0) continue;
+			calls++;
+			const first = canonicalise(`go/${[host, ...path].join("/")}`);
+			if (!first.ok) continue;
+			accepted++;
+			const c = first.value;
+			expect<unknown>(canonicalise(c)).toEqual({ ok: true, value: c });
+			expect(isCanonical(c)).toBe(true);
+			expect(ecosystemOf(c)).toBe("go");
+		}
+	expect(calls).toBe(4 * (30 + 30 ** 2 + 30 ** 3));
+	expect(accepted).toBeGreaterThan(1000);
 });
