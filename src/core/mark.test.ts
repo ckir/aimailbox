@@ -247,6 +247,25 @@ test("questions and replies", () => {
 	};
 	expect(markEntry("npm", r, "1.0.0")).toBe("unknown");
 });
+test("a question marked resolved for a version resolves for that version or a later one only", () => {
+	const q: Entry = {
+		formatVersion: 1,
+		noteNumber: 7,
+		kind: "question",
+		timeWritten: T0,
+		summary: "q",
+		warningTags: [],
+		replyCount: 0,
+		version: "1.0.0",
+		resolved: { time: T0 + 1, version: "2.0.0" },
+	};
+	expect(markEntry("npm", q, "2.0.0")).toBe("resolved");
+	expect(markEntry("npm", q, "3.0.0")).toBe("resolved");
+	expect(markEntry("npm", q, "1.9.9")).toBe("unknown");
+	expect(markEntry("npm", q, "latest")).toBe("unknown");
+	expect(markEntry("npm", q, undefined)).toBe("unknown");
+	expect(markEntry("npm", q, "1.0.0")).toBe("same-version");
+});
 test("a vote for vv1.2.3 is a version of its own: it matches installed vv1.2.3, not 1.2.3", () => {
 	const votes = [1, 2].map((i) => ({
 		form: "doesNotReproduce" as const,

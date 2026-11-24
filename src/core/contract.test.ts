@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { ECOSYSTEMS } from "./ecosystem.ts";
-import { readEntry, validateEntry } from "./entry.ts";
-import { problemEntry, T0 } from "./fixtures.ts";
+import { readDigestPage, readEntry, validateEntry } from "./entry.ts";
+import { problemEntry, T0, workedEntry } from "./fixtures.ts";
 import { LIMITS } from "./limits.ts";
+import { lookupGroup } from "./lookup.ts";
 import {
 	type NoteContent,
 	prepareDraft,
@@ -149,4 +150,41 @@ test("a note written by a client survives prepare, validate and read, at the cap
 		expect<unknown>(read.value).toEqual(published);
 	}
 	expect(drafts.length).toBe(12);
+});
+
+test("a digest page read from the wire feeds a lookup: its entries, their order and their marks", () => {
+	const question = {
+		formatVersion: 1,
+		noteNumber: 50,
+		kind: "question",
+		timeWritten: T0,
+		summary: "q",
+		warningTags: [],
+		replyCount: 0,
+		version: "1.0.0",
+	};
+	const wire = JSON.parse(
+		JSON.stringify({
+			formatVersion: 1,
+			entries: [workedEntry, question, { formatVersion: 2, noteNumber: 9 }],
+		}),
+	);
+	const page = readDigestPage(wire);
+	if (page.status !== "ok") throw new Error(page.status);
+	expect<unknown>(page.entries[0]).toEqual({
+		status: "ok",
+		value: workedEntry,
+		cleaned: false,
+	});
+	expect<unknown>(page.entries[1]).toEqual({
+		status: "ok",
+		value: question,
+		cleaned: false,
+	});
+	const g = lookupGroup("npm", page.entries, { installed: "1.0.0" });
+	expect(g.shown.map((s) => [s.entry.noteNumber, s.mark])).toEqual([
+		[50, "same-version"],
+		[41, "unknown"],
+	]);
+	expect(g.unknownFormat).toEqual({ count: 1, noteNumbers: [9] });
 });

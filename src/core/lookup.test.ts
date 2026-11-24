@@ -108,7 +108,7 @@ test("entries of an unknown format are reported apart, outside the order and the
 		unknown(),
 	];
 	const g = lookupGroup("npm", entries, {});
-	expect(g.shown.length).toBe(10);
+	expect(shownNumbers(g)).toEqual([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
 	expect(g.notShown).toBe(0);
 	expect(g.unknownFormat.count).toBe(13);
 	expect(g.unknownFormat.noteNumbers).toEqual([
