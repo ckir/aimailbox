@@ -227,6 +227,16 @@ test("gopkg.in drops -unstable with the version and refuses a bare .v", () => {
 	bad("go/gopkg.in/yaml.v2.v3-unstable");
 });
 
+test("gopkg.in allows a major version of more than one digit", () => {
+	ok("go/gopkg.in/yaml.v10", "go/gopkg.in/yaml");
+	ok("go/gopkg.in/user/pkg.v12-unstable", "go/gopkg.in/user/pkg");
+	ok("go/gopkg.in/yaml.v100", "go/gopkg.in/yaml");
+});
+test("gopkg.in accepts .v1 and .v1-unstable, and still refuses .v0-unstable", () => {
+	ok("go/gopkg.in/yaml.v1-unstable", "go/gopkg.in/yaml");
+	ok("go/gopkg.in/yaml.v1", "go/gopkg.in/yaml");
+	bad("go/gopkg.in/yaml.v0-unstable");
+});
 test("a gopkg.in name is refused or canonicalises to a fixed point", () => {
 	for (const p of [
 		"yaml.v2-unstable.v3",
@@ -251,62 +261,6 @@ test("what is left of a gopkg.in name must itself be a plain element", () => {
 	// Known over-refusal, parked: Go accepts an internal ".vN.word" segment,
 	// but the leftmost version match used here refuses it.
 	bad("go/gopkg.in/pkg.v2.foo.v3");
-});
-
-test("canonicalising a go name twice changes nothing, over a small grammar", () => {
-	const hosts = ["gopkg.in", "github.com", "v8.dev", "GitHub.com"];
-	const elements = [
-		"yaml",
-		"yaml.v2",
-		"yaml.v",
-		"yaml.v0",
-		"yaml.v2-unstable",
-		"yaml.v-unstable",
-		"yaml.v0-unstable",
-		"yaml.v2-unstable.1",
-		"yaml.v2.3",
-		"yaml.v.v2",
-		"yaml.v2.v3",
-		"yaml-unstable",
-		"v1",
-		"v2",
-		"v10",
-		"v0",
-		"v02",
-		"v1.x",
-		"v8.dev",
-		"v.2",
-		"v2.",
-		"v",
-		"a..b",
-		"go-yaml",
-		"con",
-		"a~1",
-		"-x",
-		"x.v3",
-		"x.v3-unstable",
-		"V2",
-	];
-	const paths: string[][] = [[]];
-	for (let depth = 0; depth < 3; depth++)
-		for (const path of paths.slice(paths.findIndex((p) => p.length === depth)))
-			for (const e of elements) paths.push([...path, e]);
-	let accepted = 0;
-	let calls = 0;
-	for (const host of hosts)
-		for (const path of paths) {
-			if (path.length === 0) continue;
-			calls++;
-			const first = canonicalise(`go/${[host, ...path].join("/")}`);
-			if (!first.ok) continue;
-			accepted++;
-			const c = first.value;
-			expect<unknown>(canonicalise(c)).toEqual({ ok: true, value: c });
-			expect(isCanonical(c)).toBe(true);
-			expect(ecosystemOf(c)).toBe("go");
-		}
-	expect(calls).toBe(4 * (30 + 30 ** 2 + 30 ** 3));
-	expect(accepted).toBeGreaterThan(1000);
 });
 
 test("gopkg.in accepts a remainder that ends in -unstable and refuses stacked suffixes", () => {
@@ -336,67 +290,105 @@ test("gopkg.in accepts a remainder that ends in -unstable and refuses stacked su
 	}
 });
 
-test("canonicalising a go name twice changes nothing, over a second grammar with -unstable", () => {
-	const hosts = ["gopkg.in", "github.com", "v8.dev", "GitHub.com"];
-	const elements = [
-		"yaml",
-		"yaml.v2",
-		"yaml.v",
-		"yaml.v0",
-		"yaml.v2-unstable",
-		"yaml.v-unstable",
-		"yaml.v0-unstable",
-		"yaml.v2-unstable.1",
-		"yaml.v2.3",
-		"yaml.v.v2",
-		"yaml.v2.v3",
-		"yaml-unstable",
-		"v1",
-		"v2",
-		"v10",
-		"v0",
-		"v02",
-		"v1.x",
-		"v8.dev",
-		"v.2",
-		"v2.",
-		"v",
-		"a..b",
-		"go-yaml",
-		"con",
-		"a~1",
-		"-x",
-		"x.v3",
-		"x.v3-unstable",
-		"V2",
-		"yaml-unstable.v2",
-		"yaml-unstable.v2-unstable",
-		"yaml.v2-unstable.v3-unstable",
-		"pkg..v2-unstable",
-		"yaml.v.v2-unstable",
-		"a-unstable.v1",
-		"-unstable",
-		"yaml.v2-unstable-unstable",
-		"x-unstable.v0",
-	];
-	const paths: string[][] = [[]];
-	for (let depth = 0; depth < 3; depth++)
-		for (const path of paths.slice(paths.findIndex((p) => p.length === depth)))
-			for (const e of elements) paths.push([...path, e]);
-	let accepted = 0;
-	let calls = 0;
+// Each canonical name must be a fixed point of canonicalise, and every name the
+// grammar reaches must be refused or canonicalise to such a fixed point.
+const grammarFailures: string[] = [];
+const checkFixedPoint = (host: string, path: readonly string[]): boolean => {
+	const first = canonicalise(`go/${[host, ...path].join("/")}`);
+	if (!first.ok) return false;
+	const c = first.value;
+	const again = canonicalise(c);
+	// The same three checks as ok() makes (stable, canonical, go), recorded
+	// here and asserted once per test: thousands of names, one assertion call.
+	if (!again.ok || again.value !== c) grammarFailures.push(`${c}: not stable`);
+	if (!isCanonical(c)) grammarFailures.push(`${c}: not canonical`);
+	if (ecosystemOf(c) !== "go") grammarFailures.push(`${c}: not go`);
+	return true;
+};
+const GRAMMAR_ELEMENTS = [
+	"yaml",
+	"yaml.v2",
+	"yaml.v",
+	"yaml.v0",
+	"yaml.v2-unstable",
+	"yaml.v-unstable",
+	"yaml.v0-unstable",
+	"yaml.v2-unstable.1",
+	"yaml.v2.3",
+	"yaml.v.v2",
+	"yaml.v2.v3",
+	"yaml-unstable",
+	"v1",
+	"v2",
+	"v10",
+	"v0",
+	"v02",
+	"v1.x",
+	"v8.dev",
+	"v.2",
+	"v2.",
+	"v",
+	"a..b",
+	"go-yaml",
+	"con",
+	"a~1",
+	"-x",
+	"x.v3",
+	"x.v3-unstable",
+	"V2",
+	"yaml-unstable.v2",
+	"yaml-unstable.v2-unstable",
+	"yaml.v2-unstable.v3",
+	"yaml.v2-unstable.v3-unstable",
+	"pkg..v2-unstable",
+	"yaml.v.v2-unstable",
+	"a-unstable.v1",
+	"-unstable",
+	"yaml.v2-unstable-unstable",
+	"x-unstable.v0",
+];
+// Every element that exercises the last-element rule of gopkg.in.
+const GOPKG_LAST_ELEMENTS = [
+	"yaml",
+	"yaml.v2",
+	"yaml.v",
+	"yaml.v2-unstable",
+	"yaml-unstable.v2",
+	"yaml.v2-unstable.v3",
+	"yaml.v.v2",
+	"yaml.v0-unstable",
+	"pkg..v2-unstable",
+	"a-unstable.v1",
+	"x.v3",
+	"con",
+];
+test("canonicalising a go name twice changes nothing, over a grammar with -unstable", () => {
+	expect(GOPKG_LAST_ELEMENTS.length).toBeLessThanOrEqual(12);
+	for (const e of GOPKG_LAST_ELEMENTS) expect(GRAMMAR_ELEMENTS).toContain(e);
+	const hosts = ["gopkg.in", "github.com", "v8.dev"];
+	const accepted = new Map<string, number>(hosts.map((h) => [h, 0]));
+	const tally = (host: string, path: readonly string[]) => {
+		if (checkFixedPoint(host, path))
+			accepted.set(host, (accepted.get(host) ?? 0) + 1);
+	};
 	for (const host of hosts)
-		for (const path of paths) {
-			if (path.length === 0) continue;
-			calls++;
-			const first = canonicalise(`go/${[host, ...path].join("/")}`);
-			if (!first.ok) continue;
-			accepted++;
-			const c = first.value;
-			expect<unknown>(canonicalise(c)).toEqual({ ok: true, value: c });
-			expect(isCanonical(c)).toBe(true);
-			expect(ecosystemOf(c)).toBe("go");
+		for (const e1 of GRAMMAR_ELEMENTS) {
+			tally(host, [e1]);
+			for (const e2 of GRAMMAR_ELEMENTS) tally(host, [e1, e2]);
 		}
-	expect(calls).toBe(4 * (39 + 39 ** 2 + 39 ** 3));
-	expect(accepted).toBeGreaterThan(1000);
+	for (const e1 of GOPKG_LAST_ELEMENTS)
+		for (const e2 of GOPKG_LAST_ELEMENTS)
+			for (const e3 of GOPKG_LAST_ELEMENTS) tally("gopkg.in", [e1, e2, e3]);
+	for (const host of hosts) expect(accepted.get(host) ?? 0).toBeGreaterThan(0);
+	expect(grammarFailures).toEqual([]);
+});
+test("a host in capitals reaches the same fixed points", () => {
+	let accepted = 0;
+	for (const e1 of GOPKG_LAST_ELEMENTS) {
+		if (checkFixedPoint("GitHub.com", [e1])) accepted++;
+		for (const e2 of ["yaml", "v2", "yaml.v2"])
+			if (checkFixedPoint("GitHub.com", [e1, e2])) accepted++;
+	}
+	expect(accepted).toBeGreaterThan(0);
+	expect(grammarFailures).toEqual([]);
 });

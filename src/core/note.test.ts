@@ -263,3 +263,104 @@ test("a published note's warning tags keep the first occurrence of each known ta
 		cleaned: false,
 	});
 });
+
+test("a draft's version is not stripped, so a hidden character in it is a bad version", () => {
+	expect<unknown>(prepareDraft({ ...problem, version: "1.2.3\u200b" })).toEqual(
+		{
+			ok: false,
+			error: "bad-version",
+		},
+	);
+	expect<unknown>(
+		prepareDraft({ ...question, version: "1.2.3\u200b" }),
+	).toEqual({
+		ok: false,
+		error: "bad-version",
+	});
+});
+test("a draft's valid version passes through unchanged and is not counted in the text budget", () => {
+	expect<unknown>(prepareDraft({ ...problem, version: "v1.2.0" })).toEqual({
+		ok: true,
+		value: { ...problem, version: "v1.2.0" },
+	});
+	const full = {
+		...problem,
+		summary: "s",
+		whatWasDone: "a".repeat(800),
+		whatHappened: "a".repeat(800),
+		workaround: "a".repeat(800),
+		freeText: "a".repeat(1695), // 4096 bytes of text
+		version: "1.2.3",
+	};
+	expect<unknown>(prepareDraft(full)).toEqual({ ok: true, value: full });
+	expect<unknown>(validateWrite(full)).toEqual({ ok: true, value: full });
+});
+
+// A note whose text fields hold multi-byte characters: 1 + 3 * 800 bytes in the
+// three 800-byte fields, and a free text whose size in bytes is set per case.
+const utf8Bytes = (s: string) => new TextEncoder().encode(s).length;
+const multiByteNote = (ch: string, freeText: string) => {
+	const per = 800 / utf8Bytes(ch);
+	return {
+		...problem,
+		summary: "s",
+		whatWasDone: ch.repeat(per),
+		whatHappened: ch.repeat(per),
+		workaround: ch.repeat(per),
+		freeText,
+	};
+};
+const textFields = [
+	"summary",
+	"whatWasDone",
+	"whatHappened",
+	"workaround",
+	"freeText",
+] as const;
+const textUnits = (note: Record<string, unknown>) =>
+	textFields.reduce((n, k) => n + (note[k] as string).length, 0);
+const textBytes = (note: Record<string, unknown>) =>
+	textFields.reduce((n, k) => n + utf8Bytes(note[k] as string), 0);
+
+test("the 4096-byte budget counts UTF-8 bytes, not UTF-16 units, when a note is written", () => {
+	for (const ch of ["é", "😀"]) {
+		const size = utf8Bytes(ch);
+		const fit = Math.floor(1695 / size); // characters that fit the 1695 bytes left
+		const exact = multiByteNote(
+			ch,
+			ch.repeat(fit) + "a".repeat(1695 - fit * size),
+		);
+		expect(textBytes(exact)).toBe(4096);
+		expect<unknown>(validateWrite(exact)).toEqual({ ok: true, value: exact });
+		const over = multiByteNote(ch, ch.repeat(fit + 1));
+		expect(textBytes(over)).toBe(4097);
+		expect(textUnits(over)).toBeLessThanOrEqual(4095);
+		err(over, "too-long");
+		err({ ...over, freeText: ch.repeat(2000 / size) }, "too-long"); // at its own cap
+		err({ ...problem, freeText: ch.repeat(2000 / size + 1) }, "too-long"); // over its own cap in bytes, under it in units
+	}
+});
+test("the 4096-byte budget counts UTF-8 bytes, not UTF-16 units, when a note is read", () => {
+	for (const ch of ["é", "😀"]) {
+		const size = utf8Bytes(ch);
+		const fit = Math.floor(1695 / size);
+		const exact = multiByteNote(
+			ch,
+			ch.repeat(fit) + "a".repeat(1695 - fit * size),
+		);
+		expect<unknown>(readPublishedNote({ ...published, ...exact })).toEqual({
+			status: "ok",
+			value: { ...published, ...exact },
+			cleaned: false,
+		});
+		const over = multiByteNote(ch, ch.repeat(2000 / size)); // 2000 bytes: its own cap
+		expect(textUnits(over)).toBeLessThanOrEqual(4095);
+		const r = readPublishedNote({ ...published, ...over });
+		if (r.status !== "ok") throw new Error(r.status);
+		expect(r.cleaned).toBe(true);
+		expect((r.value as { freeText: string }).freeText).toBe(ch.repeat(fit));
+		expect((r.value as { whatWasDone: string }).whatWasDone).toBe(
+			over.whatWasDone,
+		);
+	}
+});

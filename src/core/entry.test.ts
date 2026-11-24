@@ -418,3 +418,78 @@ test("strict mode refuses a row with no current vote; the lenient reader keeps i
 		true,
 	);
 });
+
+test("a format version other than 1 is unknown-format to the service and the reader", () => {
+	const absent: Record<string, unknown> = { ...workedEntry };
+	delete absent.formatVersion;
+	const refused: unknown[] = [
+		{ ...workedEntry, formatVersion: 2 },
+		{ ...workedEntry, formatVersion: 0 },
+		{ ...workedEntry, formatVersion: "1" },
+		{ ...workedEntry, formatVersion: 1.5 },
+		{ ...workedEntry, formatVersion: undefined },
+		absent,
+	];
+	for (const e of refused)
+		expect<unknown>(validateEntry("npm", e)).toEqual({
+			ok: false,
+			error: "unknown-format",
+		});
+	expect<unknown>(
+		readEntry({ ...workedEntry, formatVersion: 2, noteNumber: 41 }),
+	).toEqual({ status: "unknown-format", formatVersion: 2, noteNumber: 41 });
+	expect<unknown>(
+		readEntry({ ...workedEntry, formatVersion: 2, noteNumber: 0 }),
+	).toEqual({ status: "unknown-format", formatVersion: 2 });
+	expect<unknown>(readEntry({ formatVersion: 2 })).toEqual({
+		status: "unknown-format",
+		formatVersion: 2,
+	});
+	for (const e of [
+		{ ...workedEntry, formatVersion: 0 },
+		{ ...workedEntry, formatVersion: "1" },
+		{ ...workedEntry, formatVersion: 1.5 },
+		absent,
+	])
+		expect<unknown>(readEntry(e)).toEqual({ status: "unparseable" });
+});
+test("authorObservedVersion is checked as a version in both modes", () => {
+	const good = problemEntry({ authorObservedVersion: "1.2.3" });
+	expect<unknown>(validateEntry("npm", good)).toEqual({
+		ok: true,
+		value: good,
+	});
+	expect<unknown>(readEntry(good)).toEqual({
+		status: "ok",
+		value: good,
+		cleaned: false,
+	});
+	for (const bad of ["1.2 3", ""]) {
+		const e = problemEntry({ authorObservedVersion: bad });
+		expect<unknown>(validateEntry("npm", e)).toEqual({
+			ok: false,
+			error: "bad-version",
+		});
+		expect<unknown>(readEntry(e)).toEqual({ status: "unparseable" });
+	}
+});
+test("a question's version is checked as a version in both modes", () => {
+	const good = { ...questionEntry, version: "1.2.3" };
+	expect<unknown>(validateEntry("npm", good)).toEqual({
+		ok: true,
+		value: good,
+	});
+	expect<unknown>(readEntry(good)).toEqual({
+		status: "ok",
+		value: good,
+		cleaned: false,
+	});
+	for (const bad of ["1.2 3", ""]) {
+		const e = { ...questionEntry, version: bad };
+		expect<unknown>(validateEntry("npm", e)).toEqual({
+			ok: false,
+			error: "bad-version",
+		});
+		expect<unknown>(readEntry(e)).toEqual({ status: "unparseable" });
+	}
+});

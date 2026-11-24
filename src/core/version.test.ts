@@ -272,13 +272,21 @@ test("rowVersion does not repair an invalid version", () => {
 });
 
 test("resolveInstalled stops at the second group: many distinct versions give undefined, equal ones the first member", () => {
-	const distinct = Array.from({ length: 20000 }, (_, i) => `1.0.${i}`);
-	const started = performance.now();
-	expect<unknown>(resolveInstalled("npm", undefined, distinct)).toEqual({
+	const distinct = Array.from({ length: 50 }, (_, i) => `1.0.${i}`);
+	let reads = 0;
+	const counted = new Proxy(distinct, {
+		get(target, key, receiver) {
+			if (typeof key === "string" && /^\d+$/.test(key)) reads += 1;
+			return Reflect.get(target, key, receiver);
+		},
+	});
+	expect<unknown>(resolveInstalled("npm", undefined, counted)).toEqual({
 		ok: true,
 		value: undefined,
 	});
-	expect(performance.now() - started).toBeLessThan(1000); // quadratic took minutes
+	// One validity pass over all 50 elements, then the first two reads of the
+	// loop: the loop stops at the second group instead of reading to the end.
+	expect(reads).toBeLessThanOrEqual(distinct.length + 2);
 	expect<unknown>(
 		resolveInstalled("npm", undefined, [
 			"v1.2.3",
