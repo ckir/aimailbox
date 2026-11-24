@@ -1,7 +1,7 @@
 import type { Ecosystem } from "./ecosystem.ts";
 import type { FormCounts, VersionRow } from "./entry.ts";
 import { LIMITS } from "./limits.ts";
-import { canOrder, compareVersions, rowKey } from "./version.ts";
+import { canOrder, compareVersions, rowKey, rowVersion } from "./version.ts";
 
 export type Vote = {
 	form: "confirm" | "doesNotReproduce";
@@ -46,7 +46,7 @@ function byKey(a: Tally, b: Tally): number {
 			: 0;
 }
 
-// Rows that can be ordered, ascending by version (ties by key); the key is the version of a row.
+// Rows that can be ordered, ascending by version (ties by the row's version string).
 function byVersion(ecosystem: Ecosystem): (a: Tally, b: Tally) => number {
 	return (a, b) =>
 		compareVersions(ecosystem, a.row.version, b.row.version) || byKey(a, b);
@@ -61,7 +61,7 @@ function tallyRows(ecosystem: Ecosystem, votes: readonly Vote[]): Tally[] {
 		if (tally === undefined) {
 			tally = {
 				row: {
-					version: key,
+					version: rowVersion(ecosystem, vote.version),
 					confirmTotal: 0,
 					confirmNonBurst: 0,
 					doesNotReproduceTotal: 0,
@@ -94,6 +94,7 @@ function highestConfirmed(
 		if (vote.version === undefined || !canOrder(ecosystem, vote.version)) {
 			continue;
 		}
+		// canOrder is true, so the key is a valid version that rowKey leaves unchanged.
 		const key = rowKey(ecosystem, vote.version);
 		if (
 			highest === undefined ||

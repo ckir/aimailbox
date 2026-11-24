@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type { Entry } from "./entry.ts";
 import { problemEntry, T0, workedEntry } from "./fixtures.ts";
 import { markEntry } from "./mark.ts";
+import { deriveStatus } from "./status.ts";
 
 test("the worked entry, for every installed version both agents computed", () => {
 	expect(markEntry("npm", workedEntry, undefined)).toBe("unknown");
@@ -245,4 +246,15 @@ test("questions and replies", () => {
 		parentGone: true,
 	};
 	expect(markEntry("npm", r, "1.0.0")).toBe("unknown");
+});
+test("a vote for vv1.2.3 is a version of its own: it matches installed vv1.2.3, not 1.2.3", () => {
+	const votes = [1, 2].map((i) => ({
+		form: "doesNotReproduce" as const,
+		version: "vv1.2.3",
+		arrivalTime: T0 + i,
+		isBurst: false,
+	}));
+	const e = problemEntry({ ...deriveStatus("npm", votes) });
+	expect(markEntry("npm", e, "1.2.3")).not.toBe("disputed-on-your-version");
+	expect(markEntry("npm", e, "vv1.2.3")).toBe("disputed-on-your-version");
 });

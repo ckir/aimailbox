@@ -268,3 +268,38 @@ test("a digest page", () => {
 		}).status,
 	).toBe("ok");
 });
+test("strict validation accepts a row version that is not a key form: vv1.2.3 and v", () => {
+	const row = {
+		version: "1.2.0",
+		confirmTotal: 2,
+		confirmNonBurst: 2,
+		doesNotReproduceTotal: 0,
+		doesNotReproduceNonBurst: 0,
+	};
+	const e = (version: string) =>
+		problemEntry({
+			rows: [{ ...row, version }],
+			confirm: {
+				total: 2,
+				nonBurstTotal: 2,
+				burst: false,
+				lastNonBurstTime: T0,
+			},
+			doesNotReproduce: { total: 0, nonBurstTotal: 0, burst: false },
+		});
+	expect(validateEntry("npm", e("vv1.2.3")).ok).toBe(true);
+	expect(validateEntry("npm", e("v")).ok).toBe(true);
+	expect(validateEntry("npm", e("v1.2.0")).ok).toBe(false);
+	expect(
+		validateEntry("pypi", {
+			...e("vvfoo"),
+			rows: [{ ...row, version: "vvfoo" }],
+		}).ok,
+	).toBe(true);
+	expect(
+		validateEntry("npm", {
+			...e("1.2.0"),
+			rows: [row, { ...row, version: "v1.2.0" }],
+		}).ok,
+	).toBe(false); // two rows with one key
+});

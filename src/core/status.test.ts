@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import type { Ecosystem } from "./ecosystem.ts";
 import { T0, workedEntry } from "./fixtures.ts";
 import { deriveStatus, type Vote } from "./status.ts";
 
@@ -153,4 +154,46 @@ test("the default bound is sixteen rows", () => {
 	const s = deriveStatus("npm", votes);
 	expect(s.rows.length).toBe(16);
 	expect(s.rows[0]?.version).toBe("1.0.4");
+});
+
+test("a row's version is valid and stable, whatever leading v the vote carries", () => {
+	const rowsOf = (eco: Ecosystem, versions: string[]) =>
+		deriveStatus(
+			eco,
+			versions.map((v, i) => c(v, i)),
+		).rows.map((r) => r.version);
+	expect(rowsOf("npm", ["v", "vv1.2.3", "v1.2.3", "1.2.3"])).toEqual([
+		"1.2.3",
+		"v",
+		"vv1.2.3",
+	]);
+	const npm = deriveStatus("npm", [
+		c("v1.2.3", 1),
+		c("1.2.3", 2),
+		c("vv1.2.3", 3),
+	]);
+	expect(npm.rows.map((r) => [r.version, r.confirmTotal])).toEqual([
+		["1.2.3", 2],
+		["vv1.2.3", 1],
+	]);
+	expect(rowsOf("pypi", ["vvfoo", "vfoo", "foo"])).toEqual(["foo", "vvfoo"]);
+	expect(rowsOf("tool", ["vvx", "vx", "x"])).toEqual(["vvx", "x"]);
+	expect(rowsOf("cargo", ["vv1", "v1", "1"])).toEqual(["1", "vv1"]);
+});
+test("rows with odd versions come out the same in any vote order", () => {
+	const versions = ["v", "vv1.2.3", "v1.2.3", "1.2.3", "vvfoo", "1.2.3+b"];
+	const votes = versions.map((v, i) => (i % 2 === 0 ? c(v, i) : d(v, i)));
+	for (const eco of ["npm", "pypi", "tool", "cargo", "go"] as const) {
+		const a = deriveStatus(eco, votes);
+		expect(deriveStatus(eco, [...votes].reverse())).toEqual(a);
+		expect(
+			deriveStatus(eco, [
+				votes[3],
+				votes[0],
+				...votes.slice(4),
+				votes[1],
+				votes[2],
+			] as Vote[]),
+		).toEqual(a);
+	}
 });

@@ -135,6 +135,15 @@ export function rowKey(ecosystem: Ecosystem, version: string): string {
 	return plus === -1 ? stripped : stripped.slice(0, plus);
 }
 
+/**
+ * The version a table row carries: the row key when that key is itself a valid
+ * 12.1 version that rowKey leaves unchanged, otherwise the version exactly as written.
+ */
+export function rowVersion(ecosystem: Ecosystem, version: string): string {
+	const key = rowKey(ecosystem, version);
+	return isValidVersion(key) && rowKey(ecosystem, key) === key ? key : version;
+}
+
 export function resolveInstalled(
 	ecosystem: Ecosystem,
 	explicit: string | undefined,

@@ -162,3 +162,28 @@ test("the comparison is a total order", () => {
 	expect(compareEntries(k, k)).toBe(0);
 	expect(compareEntries(k, { ...k, noteNumber: 40 })).toBeLessThan(0);
 });
+test("key 4: a note with no confirmation sorts by its time written, between notes confirmed earlier and later", () => {
+	const confirmedAt = (noteNumber: number, time: number) =>
+		problemEntry({
+			noteNumber,
+			timeWritten: T0,
+			confirm: {
+				total: 1,
+				nonBurstTotal: 1,
+				burst: false,
+				lastNonBurstTime: time,
+			},
+			doesNotReproduce: {
+				total: 1,
+				nonBurstTotal: 1,
+				burst: false,
+				lastNonBurstTime: T0,
+			},
+		});
+	const late = confirmedAt(1, T0 + 900);
+	const early = confirmedAt(2, T0 + 100);
+	const unconfirmed = problemEntry({ noteNumber: 3, timeWritten: T0 + 500 });
+	expect(
+		numbers(sortEntries("npm", [early, unconfirmed, late], undefined, "")),
+	).toEqual([1, 3, 2]);
+});

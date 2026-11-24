@@ -5,6 +5,7 @@ import {
 	isValidVersion,
 	resolveInstalled,
 	rowKey,
+	rowVersion,
 	stripLeadingV,
 	versionsEqual,
 } from "./version.ts";
@@ -173,4 +174,56 @@ test("the installed version", () => {
 		ok: true,
 		value: "2024-01",
 	});
+});
+
+const ROW_VERSIONS = [
+	"v",
+	"vv1.2.3",
+	"v1.2.3",
+	"1.2.3",
+	"1.2.3+b",
+	"v1.2.3+b",
+	"vvfoo",
+	"vfoo",
+	"foo",
+	"vvx",
+	"vx",
+	"vv1",
+	"v1",
+	"vvv",
+	"1.0.0-rc.1",
+];
+const FIVE = ["npm", "cargo", "go", "pypi", "tool"] as const;
+
+test("a row's version is its key when the key is a valid version that rowKey leaves unchanged, else the version as written", () => {
+	expect(rowVersion("npm", "v1.2.0+a")).toBe("1.2.0");
+	expect(rowVersion("pypi", "v1.2.0+a")).toBe("1.2.0+a");
+	expect(rowVersion("npm", "v")).toBe("v");
+	expect(rowVersion("pypi", "vv1.2.3")).toBe("vv1.2.3"); // key "v1.2.3" is not stable
+	expect(rowVersion("npm", "vv1.2.3")).toBe("vv1.2.3");
+	expect(rowVersion("tool", "vvx")).toBe("vvx");
+	expect(rowVersion("cargo", "vv1")).toBe("vv1");
+});
+test("a row's version is a valid version, stable under rowKey, and rowVersion is idempotent", () => {
+	for (const e of FIVE) {
+		for (const v of ROW_VERSIONS) {
+			const r = rowVersion(e, v);
+			expect(isValidVersion(r)).toBe(true);
+			expect(rowVersion(e, r)).toBe(r);
+		}
+	}
+});
+test("versions with equal row versions have equal row keys", () => {
+	for (const e of FIVE) {
+		for (const a of ROW_VERSIONS) {
+			for (const b of ROW_VERSIONS) {
+				if (rowVersion(e, a) === rowVersion(e, b)) {
+					expect(rowKey(e, a)).toBe(rowKey(e, b));
+				}
+				if (rowKey(e, a) !== rowKey(e, b)) {
+					expect(rowVersion(e, a)).not.toBe(rowVersion(e, b));
+				}
+			}
+		}
+	}
 });

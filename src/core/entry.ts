@@ -8,7 +8,7 @@ import {
 	isPositiveSafeInteger,
 } from "./note.ts";
 import type { ReadResult, Result } from "./result.ts";
-import { canOrder, isValidVersion, rowKey } from "./version.ts";
+import { canOrder, isValidVersion, rowKey, rowVersion } from "./version.ts";
 
 export type FormCounts = {
 	total: number;
@@ -189,9 +189,10 @@ function parseRows(
 		)
 			throw new Fault("bad-number");
 		if (ecosystem !== undefined) {
-			if (rowKey(ecosystem, v) !== v) throw new Fault("bad-row-key");
-			if (keys.has(v)) throw new Fault("duplicate-row");
-			keys.add(v);
+			if (rowVersion(ecosystem, v) !== v) throw new Fault("bad-row-key");
+			const key = rowKey(ecosystem, v);
+			if (keys.has(key)) throw new Fault("duplicate-row");
+			keys.add(key);
 		}
 		rows.push(row);
 	}
