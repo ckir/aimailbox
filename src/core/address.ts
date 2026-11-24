@@ -53,13 +53,116 @@ function cargoName(name: string): string | undefined {
 	return asciiLower(name).replace(/_/g, "-");
 }
 
-// Task 5 fills in the go and tool rules.
-function goName(_name: string): string | undefined {
-	return undefined;
+// Go module paths: the host is lowercased, the rest keeps its case, and a
+// major version is dropped so every major version shares one box.
+// Windows device names that Go refuses as the part of an element before its
+// first dot, compared in lower case.
+const GO_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
+const GO_ELEMENT = /^[A-Za-z0-9._~-]+$/;
+const GO_HOST = /^[a-z0-9.-]+$/;
+const GO_VERSION_SUFFIX = /\.v[0-9]+(\..*)?$/;
+const GO_ALLOWED_SUFFIX = /^\.v(0|[1-9][0-9]*)$/;
+const GO_MAJOR_ELEMENT = /^v[1-9][0-9]*$/;
+const GO_REFUSED_FINAL = /^(v0|v1|v0[0-9]+|v[0-9]+\..*)$/;
+const GO_ANY_VERSION_ELEMENT = /^v[0-9]+(\..*)?$/;
+
+function goElement(element: string): boolean {
+	if (!GO_ELEMENT.test(element)) return false;
+	if (element.startsWith(".") || element.endsWith(".")) return false;
+	const dot = element.indexOf(".");
+	const short = dot < 0 ? element : element.slice(0, dot);
+	return !GO_RESERVED.test(asciiLower(short)) && !/~[0-9]+$/.test(short);
 }
 
-function toolName(_name: string): string | undefined {
-	return undefined;
+function goName(name: string): string | undefined {
+	const elements = name.split("/");
+	if (!elements.every(goElement)) return undefined;
+	const host = asciiLower(elements[0] as string);
+	if (!GO_HOST.test(host) || !host.includes(".") || host.startsWith("-"))
+		return undefined;
+	elements[0] = host;
+	if (host === "gopkg.in") {
+		if (elements.length < 2 || elements.length > 3) return undefined;
+		const last = elements[elements.length - 1] as string;
+		const found = GO_VERSION_SUFFIX.exec(last);
+		if (found !== null) {
+			if (!GO_ALLOWED_SUFFIX.test(found[0])) return undefined;
+			const bare = last.slice(0, found.index);
+			if (!goElement(bare) || /\.v[0-9]+$/.test(bare)) return undefined;
+			elements[elements.length - 1] = bare;
+		}
+	} else if (elements.length >= 2) {
+		const last = elements[elements.length - 1] as string;
+		if (GO_REFUSED_FINAL.test(last)) return undefined;
+		if (GO_MAJOR_ELEMENT.test(last)) {
+			elements.pop();
+			const next = elements[elements.length - 1] as string;
+			if (elements.length >= 2 && GO_ANY_VERSION_ELEMENT.test(next))
+				return undefined;
+		}
+	}
+	return elements.join("/");
+}
+
+const TOOL_SCHEME = /^([A-Za-z]+):\/\//;
+const TOOL_SCHEMES = ["https", "http", "ssh", "git"];
+const TOOL_LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+const TOOL_ELEMENT = /^[a-z0-9._~-]+$/;
+
+// Splits a tool name into host and path in one of its three forms (URL,
+// remote, plain), tried in that order. Nothing is lowercased or trimmed yet.
+function toolParts(name: string): { host: string; path: string } | undefined {
+	const scheme = TOOL_SCHEME.exec(name);
+	if (scheme !== null) {
+		if (!TOOL_SCHEMES.includes(asciiLower(scheme[1] as string)))
+			return undefined;
+		let rest = name.slice(scheme[0].length);
+		const hash = rest.indexOf("#");
+		if (hash >= 0) rest = rest.slice(0, hash);
+		const query = rest.indexOf("?");
+		if (query >= 0) rest = rest.slice(0, query);
+		const slash = rest.indexOf("/");
+		if (slash < 0) return undefined;
+		let authority = rest.slice(0, slash);
+		const path = rest.slice(slash + 1);
+		const at = authority.indexOf("@");
+		if (at >= 0) {
+			if (at === 0 || authority.indexOf("@", at + 1) >= 0) return undefined;
+			authority = authority.slice(at + 1);
+		}
+		return { host: authority.replace(/:[0-9]+$/, ""), path };
+	}
+	const at = name.indexOf("@");
+	if (at >= 0) {
+		const user = name.slice(0, at);
+		const rest = name.slice(at + 1);
+		if (user === "" || /[/:?#@\s]/.test(user)) return undefined;
+		const colon = rest.indexOf(":");
+		if (colon < 0) return undefined;
+		const path = rest.slice(colon + 1);
+		if (/[?#]/.test(path)) return undefined;
+		return { host: rest.slice(0, colon), path };
+	}
+	const slash = name.indexOf("/");
+	if (slash < 0) return undefined;
+	return { host: name.slice(0, slash), path: name.slice(slash + 1) };
+}
+
+function toolName(name: string): string | undefined {
+	const parts = toolParts(name);
+	if (parts === undefined) return undefined;
+	const host = asciiLower(parts.host);
+	let path = asciiLower(parts.path).replace(/\/+$/, "");
+	if (path.endsWith(".git")) path = path.slice(0, -4);
+	if (path === "" || path.endsWith(".git") || path.endsWith("/"))
+		return undefined;
+	const labels = host.split(".");
+	if (labels.length < 2 || !labels.every((l) => TOOL_LABEL.test(l)))
+		return undefined;
+	const elements = path.split("/");
+	if (!elements.every((e) => TOOL_ELEMENT.test(e) && e !== "." && e !== ".."))
+		return undefined;
+	return `${host}/${path}`;
 }
 
 const NAME_RULES: Record<Ecosystem, (name: string) => string | undefined> = {
