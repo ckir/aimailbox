@@ -390,3 +390,19 @@ test("an installed version that is not valid never equals the same text", () => 
 	}
 	expect(same("tool", "nightly")).toBe("same-version"); // valid and unorderable: equal text counts
 });
+
+test("mark 2 sums the non-burst does-not-reproduce votes over every qualifying row", () => {
+	const row = (version: string, doesNotReproduceNonBurst: number) => ({
+		version,
+		confirmTotal: 0,
+		confirmNonBurst: 0,
+		doesNotReproduceTotal: doesNotReproduceNonBurst,
+		doesNotReproduceNonBurst,
+	});
+	const entry = (rows: ReturnType<typeof row>[]) =>
+		problemEntry({ reportedVersion: "1.0.0", rows });
+	expect(
+		markEntry("npm", entry([row("1.1.0", 2), row("1.2.0", 1)]), "1.2.0"),
+	).toBe("not-reproduced-on-newer"); // 2 + 1 reaches the default threshold 3
+	expect(markEntry("npm", entry([row("1.1.0", 2)]), "1.2.0")).toBe("unknown"); // 2 alone does not
+});

@@ -308,3 +308,95 @@ test("canonicalising a go name twice changes nothing, over a small grammar", () 
 	expect(calls).toBe(4 * (30 + 30 ** 2 + 30 ** 3));
 	expect(accepted).toBeGreaterThan(1000);
 });
+
+test("gopkg.in accepts a remainder that ends in -unstable and refuses stacked suffixes", () => {
+	ok("go/gopkg.in/yaml-unstable.v2", "go/gopkg.in/yaml-unstable");
+	ok("go/gopkg.in/user/pkg-unstable.v1", "go/gopkg.in/user/pkg-unstable");
+	ok("go/gopkg.in/yaml-unstable.v2-unstable", "go/gopkg.in/yaml-unstable");
+	ok("go/gopkg.in/user/yaml-unstable.v2", "go/gopkg.in/user/yaml-unstable");
+	ok("go/gopkg.in/yaml-unstable", "go/gopkg.in/yaml-unstable");
+	for (const p of [
+		"yaml.v2-unstable.v3-unstable",
+		"yaml.v.v2-unstable",
+		"pkg..v2-unstable",
+		"yaml.v2-unstable.v3",
+		"yaml.v.v2",
+		"yaml.v.v-unstable",
+		"yaml.v-unstable.v2",
+		"yaml.v0-unstable.v2",
+		"yaml.v2-unstable.v-unstable",
+		"pkg..v-unstable",
+		"pkg..v2",
+		"yaml.v-unstable",
+		"yaml.v",
+		"pkg.v2.foo.v3",
+	]) {
+		bad(`go/gopkg.in/${p}`);
+		bad(`go/gopkg.in/user/${p}`);
+	}
+});
+
+test("canonicalising a go name twice changes nothing, over a second grammar with -unstable", () => {
+	const hosts = ["gopkg.in", "github.com", "v8.dev", "GitHub.com"];
+	const elements = [
+		"yaml",
+		"yaml.v2",
+		"yaml.v",
+		"yaml.v0",
+		"yaml.v2-unstable",
+		"yaml.v-unstable",
+		"yaml.v0-unstable",
+		"yaml.v2-unstable.1",
+		"yaml.v2.3",
+		"yaml.v.v2",
+		"yaml.v2.v3",
+		"yaml-unstable",
+		"v1",
+		"v2",
+		"v10",
+		"v0",
+		"v02",
+		"v1.x",
+		"v8.dev",
+		"v.2",
+		"v2.",
+		"v",
+		"a..b",
+		"go-yaml",
+		"con",
+		"a~1",
+		"-x",
+		"x.v3",
+		"x.v3-unstable",
+		"V2",
+		"yaml-unstable.v2",
+		"yaml-unstable.v2-unstable",
+		"yaml.v2-unstable.v3-unstable",
+		"pkg..v2-unstable",
+		"yaml.v.v2-unstable",
+		"a-unstable.v1",
+		"-unstable",
+		"yaml.v2-unstable-unstable",
+		"x-unstable.v0",
+	];
+	const paths: string[][] = [[]];
+	for (let depth = 0; depth < 3; depth++)
+		for (const path of paths.slice(paths.findIndex((p) => p.length === depth)))
+			for (const e of elements) paths.push([...path, e]);
+	let accepted = 0;
+	let calls = 0;
+	for (const host of hosts)
+		for (const path of paths) {
+			if (path.length === 0) continue;
+			calls++;
+			const first = canonicalise(`go/${[host, ...path].join("/")}`);
+			if (!first.ok) continue;
+			accepted++;
+			const c = first.value;
+			expect<unknown>(canonicalise(c)).toEqual({ ok: true, value: c });
+			expect(isCanonical(c)).toBe(true);
+			expect(ecosystemOf(c)).toBe("go");
+		}
+	expect(calls).toBe(4 * (39 + 39 ** 2 + 39 ** 3));
+	expect(accepted).toBeGreaterThan(1000);
+});

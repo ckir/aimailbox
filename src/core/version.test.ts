@@ -270,3 +270,32 @@ test("rowVersion does not repair an invalid version", () => {
 		`1.0.0-${"a".repeat(57)}`,
 	); // 64 characters, valid: the leading v is still removed
 });
+
+test("resolveInstalled stops at the second group: many distinct versions give undefined, equal ones the first member", () => {
+	const distinct = Array.from({ length: 20000 }, (_, i) => `1.0.${i}`);
+	const started = performance.now();
+	expect<unknown>(resolveInstalled("npm", undefined, distinct)).toEqual({
+		ok: true,
+		value: undefined,
+	});
+	expect(performance.now() - started).toBeLessThan(1000); // quadratic took minutes
+	expect<unknown>(
+		resolveInstalled("npm", undefined, [
+			"v1.2.3",
+			"1.2.3",
+			"1.2.3+b",
+			"v1.2.3",
+		]),
+	).toEqual({ ok: true, value: "v1.2.3" });
+	expect<unknown>(
+		resolveInstalled("npm", undefined, ["1.2.3", "v1.2.3", "1.2.4"]),
+	).toEqual({ ok: true, value: undefined });
+	expect<unknown>(resolveInstalled("npm", undefined, ["1.2.3"])).toEqual({
+		ok: true,
+		value: "1.2.3",
+	});
+	expect<unknown>(resolveInstalled("npm", undefined, [])).toEqual({
+		ok: true,
+		value: undefined,
+	});
+});

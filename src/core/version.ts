@@ -163,11 +163,14 @@ export function resolveInstalled(
 	}
 	if (ecosystem === "tool") return { ok: true, value: undefined };
 	if (!recorded.every(isValidVersion)) return { ok: true, value: undefined };
-	const groups: string[] = []; // the first member of each group of equal versions
+	// The first member of the one group of equal versions, found so far. A
+	// second group means the result is undefined, so stop there: linear in the
+	// number of versions instead of quadratic in the number of distinct ones.
+	let first: string | undefined;
 	for (const version of recorded) {
-		if (!groups.some((first) => versionsEqual(ecosystem, first, version))) {
-			groups.push(version);
-		}
+		if (first === undefined) first = version;
+		else if (!versionsEqual(ecosystem, first, version))
+			return { ok: true, value: undefined };
 	}
-	return { ok: true, value: groups.length === 1 ? groups[0] : undefined };
+	return { ok: true, value: first };
 }

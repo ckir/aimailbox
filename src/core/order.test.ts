@@ -195,3 +195,51 @@ test("key 1 folds the given words: raw and folded words count alike", () => {
 	);
 	expect(orderKeys("npm", workedEntry, "1.2.1", ["lock"]).words).toBe(1);
 });
+
+test("key 3 uses the non-burst does-not-reproduce total, not the total with bursts", () => {
+	const confirm = {
+		total: 3,
+		nonBurstTotal: 3,
+		burst: false,
+		lastNonBurstTime: T0,
+	};
+	const withBurst = problemEntry({
+		noteNumber: 2,
+		confirm,
+		doesNotReproduce: {
+			total: 5,
+			nonBurstTotal: 1,
+			burst: true,
+			lastNonBurstTime: T0,
+		},
+	});
+	const without = problemEntry({
+		noteNumber: 1,
+		confirm,
+		doesNotReproduce: {
+			total: 1,
+			nonBurstTotal: 1,
+			burst: false,
+			lastNonBurstTime: T0,
+		},
+	});
+	const a = orderKeys("npm", withBurst, undefined, []);
+	const b = orderKeys("npm", without, undefined, []);
+	expect(a.balance).toBe(2);
+	expect(b.balance).toBe(2);
+	expect(
+		numbers(sortEntries("npm", [without, withBurst], undefined, "")),
+	).toEqual([2, 1]); // tied on key 3 and key 4, so key 5 decides
+});
+test("key 1 reads the summary and failure signature only, never the warning tags", () => {
+	const tagged = problemEntry({
+		summary: "other",
+		warningTags: ["network-or-install"],
+	});
+	expect(orderKeys("npm", tagged, undefined, ["network"]).words).toBe(0);
+	const named = problemEntry({
+		summary: "network",
+		warningTags: ["network-or-install"],
+	});
+	expect(orderKeys("npm", named, undefined, ["network"]).words).toBe(1);
+});

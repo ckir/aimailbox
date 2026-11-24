@@ -2,6 +2,13 @@ import { expect, test } from "bun:test";
 import { ECOSYSTEMS } from "./ecosystem.ts";
 import { readEntry, validateEntry } from "./entry.ts";
 import { problemEntry, T0 } from "./fixtures.ts";
+import { LIMITS } from "./limits.ts";
+import {
+	type NoteContent,
+	prepareDraft,
+	readPublishedNote,
+	validateWrite,
+} from "./note.ts";
 import { deriveStatus, type Vote } from "./status.ts";
 
 // Each module must accept what the one before it produces: votes -> deriveStatus -> entry -> validate / read.
@@ -53,4 +60,93 @@ test("every module accepts the previous one's output, for any version a vote may
 			}
 		}
 	}
+});
+
+// Text with a two-byte and a four-byte character, cut to exactly `bytes` bytes
+// (or `codePoints` code points) so that a field sits at its cap.
+const MIXED = "\u00e9\u{1f600}";
+const mixedBytes = (bytes: number) =>
+	MIXED.repeat(Math.floor(bytes / 6)) + "a".repeat(bytes % 6);
+const mixedCodePoints = (count: number) =>
+	Array.from(MIXED.repeat(Math.ceil(count / 2)))
+		.slice(0, count)
+		.join("");
+const SHORT = `ok ${MIXED}`;
+
+test("a note written by a client survives prepare, validate and read, at the cap of each field", () => {
+	const drafts: NoteContent[] = [];
+	const summary = mixedCodePoints(LIMITS.summaryCodePoints);
+	const problem = {
+		formatVersion: 1,
+		kind: "problem",
+		summary: SHORT,
+		whatWasDone: SHORT,
+		whatHappened: SHORT,
+		version: "1.2.3",
+	} as const;
+	drafts.push({ ...problem, summary });
+	drafts.push({
+		...problem,
+		failureSignature: mixedBytes(LIMITS.failureSignatureBytes),
+	});
+	drafts.push({ ...problem, whatWasDone: mixedBytes(LIMITS.whatWasDoneBytes) });
+	drafts.push({
+		...problem,
+		whatHappened: mixedBytes(LIMITS.whatHappenedBytes),
+	});
+	drafts.push({
+		...problem,
+		whatWasExpected: mixedBytes(LIMITS.whatWasExpectedBytes),
+	});
+	drafts.push({ ...problem, workaround: mixedBytes(LIMITS.workaroundBytes) });
+	drafts.push({ ...problem, freeText: mixedBytes(LIMITS.freeTextBytes) });
+	drafts.push({
+		...problem,
+		failureSignature: SHORT,
+		whatWasExpected: SHORT,
+		workaround: SHORT,
+		freeText: SHORT,
+	});
+	const question = {
+		formatVersion: 1,
+		kind: "question",
+		summary: SHORT,
+		freeText: SHORT,
+		version: "v2.0.0",
+	} as const;
+	drafts.push({ ...question, summary });
+	drafts.push({ ...question, freeText: mixedBytes(LIMITS.freeTextBytes) });
+	const reply = {
+		formatVersion: 1,
+		kind: "reply",
+		summary: SHORT,
+		freeText: SHORT,
+		parentNoteNumber: 7,
+	} as const;
+	drafts.push({ ...reply, summary });
+	drafts.push({ ...reply, freeText: mixedBytes(LIMITS.freeTextBytes) });
+
+	for (const draft of drafts) {
+		const prepared = prepareDraft(draft);
+		expect<unknown>(prepared.ok).toBe(true);
+		if (!prepared.ok) continue;
+		expect<unknown>(prepared.value).toEqual(draft);
+		const validated = validateWrite(prepared.value);
+		expect<unknown>(validated.ok).toBe(true);
+		if (!validated.ok) continue;
+		expect<unknown>(validated.value).toEqual(prepared.value);
+		const published = {
+			...validated.value,
+			noteNumber: 1,
+			timeWritten: 1700000000,
+			warningTags: [],
+			...(draft.kind === "reply" ? { parentGone: false } : {}),
+		};
+		const read = readPublishedNote(JSON.parse(JSON.stringify(published)));
+		expect<unknown>(read.status).toBe("ok");
+		if (read.status !== "ok") continue;
+		expect(read.cleaned).toBe(false);
+		expect<unknown>(read.value).toEqual(published);
+	}
+	expect(drafts.length).toBe(12);
 });
