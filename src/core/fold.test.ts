@@ -64,3 +64,12 @@ test("matching is on whole words and counts distinct query words", () => {
 	expect(countMatches(["lock", "file"], "the lock file, the lock")).toBe(2);
 	expect(countMatches([], "anything")).toBe(0);
 });
+
+test("countMatches folds the given words again, so raw and folded words match alike", () => {
+	expect(countMatches(["LOCK"], "LOCK")).toBe(1);
+	expect(countMatches(["Lock"], "the lock file")).toBe(1);
+	expect(countMatches(["Straße"], "strasse")).toBe(1);
+	expect(countMatches(["LOCK", "lock", "Lock"], "lock")).toBe(1); // distinct after folding
+	expect(countMatches(["lock", "file", "other"], "the lock file")).toBe(2);
+	expect(countMatches(queryWords("Lock FILE"), "the lock file")).toBe(2);
+});

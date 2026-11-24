@@ -48,3 +48,25 @@ test("lengths and cuts count the right unit and never split a code point", () =>
 	expect(cutToCodePoints("a😀b", 2)).toBe("a😀");
 	expect(cutToBytes("abc", 0)).toBe("");
 });
+
+test("cuts fail closed on NaN and on limits below one, and round fractions down", () => {
+	expect(cutToCodePoints("abcdef", Number.NaN)).toBe("");
+	expect(cutToCodePoints("abcdef", -1)).toBe("");
+	expect(cutToCodePoints("abcdef", 0)).toBe("");
+	expect(cutToCodePoints("abcdef", 0.5)).toBe("");
+	expect(cutToCodePoints("abcdef", 1.5)).toBe("a");
+	expect(cutToCodePoints("abcdef", 2.9)).toBe("ab");
+	expect(cutToCodePoints("abcdef", Number.POSITIVE_INFINITY)).toBe("abcdef");
+	expect(cutToCodePoints("abcdef", Number.NEGATIVE_INFINITY)).toBe("");
+	expect(cutToBytes("abcdef", Number.NaN)).toBe("");
+	expect(cutToBytes("abcdef", -1)).toBe("");
+	expect(cutToBytes("abcdef", 0.5)).toBe("");
+	expect(cutToBytes("abcdef", 1.5)).toBe("a");
+	expect(cutToBytes("abcdef", 3.9)).toBe("abc");
+	expect(cutToBytes("abcdef", Number.POSITIVE_INFINITY)).toBe("abcdef");
+	expect(cutToBytes("abcdef", Number.NEGATIVE_INFINITY)).toBe("");
+});
+test("a fractional byte limit never splits a character", () => {
+	expect(cutToBytes("éa", 2.9)).toBe("é"); // two bytes fit, the third does not
+	expect(cutToBytes("éa", 1.9)).toBe("");
+});

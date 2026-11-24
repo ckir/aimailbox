@@ -301,5 +301,120 @@ test("strict validation accepts a row version that is not a key form: vv1.2.3 an
 			...e("1.2.0"),
 			rows: [row, { ...row, version: "v1.2.0" }],
 		}).ok,
-	).toBe(false); // two rows with one key
+	).toBe(false); // refused earlier as bad-row-key; the duplicate-row check is pinned by the [row, row] case above
+});
+
+test("warning tags read leniently keep the first occurrence of each known tag and stay bounded", () => {
+	const many = Array(1000).fill("edits-executable");
+	expect<unknown>(readEntry({ ...workedEntry, warningTags: many })).toEqual({
+		status: "ok",
+		value: { ...workedEntry, warningTags: ["edits-executable"] },
+		cleaned: false,
+	});
+	const mixed = [
+		"disables-check",
+		"edits-executable",
+		"bogus",
+		"disables-check",
+		"network-or-install",
+		"edits-executable",
+	];
+	expect<unknown>(readEntry({ ...workedEntry, warningTags: mixed })).toEqual({
+		status: "ok",
+		value: {
+			...workedEntry,
+			warningTags: ["disables-check", "edits-executable", "network-or-install"],
+		},
+		cleaned: false,
+	});
+	const page = readDigestPage({
+		formatVersion: 1,
+		entries: [{ ...workedEntry, warningTags: many }],
+	}) as { entries: { value: { warningTags: string[] } }[] };
+	expect(page.entries[0]?.value.warningTags).toEqual(["edits-executable"]);
+});
+test("validateEntry refuses a repeated warning tag as bad-tags and an unknown one as unknown-tag", () => {
+	expect<unknown>(
+		validateEntry("npm", {
+			...workedEntry,
+			warningTags: ["edits-executable", "edits-executable"],
+		}),
+	).toEqual({ ok: false, error: "bad-tags" });
+	expect<unknown>(
+		validateEntry("npm", {
+			...workedEntry,
+			warningTags: ["disables-check", "network-or-install", "disables-check"],
+		}),
+	).toEqual({ ok: false, error: "bad-tags" });
+	expect<unknown>(
+		validateEntry("npm", { ...workedEntry, warningTags: ["bogus"] }),
+	).toEqual({ ok: false, error: "unknown-tag" });
+	expect(
+		validateEntry("npm", {
+			...workedEntry,
+			warningTags: [
+				"network-or-install",
+				"config-or-credential",
+				"disables-check",
+				"indirect-execution",
+				"edits-executable",
+			],
+		}).ok,
+	).toBe(true);
+});
+
+test("the burst flag is set exactly when some counted vote is a burst arrival", () => {
+	const bad = [
+		{ total: 5, nonBurstTotal: 0, burst: false },
+		{ total: 0, nonBurstTotal: 0, burst: true },
+		{ total: 3, nonBurstTotal: 3, burst: true, lastNonBurstTime: T0 },
+		{ total: 5, nonBurstTotal: 2, burst: false, lastNonBurstTime: T0 },
+	];
+	for (const form of bad) {
+		for (const key of ["confirm", "doesNotReproduce"] as const) {
+			const e = problemEntry({ [key]: form });
+			expect<unknown>(validateEntry("npm", e)).toEqual({
+				ok: false,
+				error: "bad-number",
+			});
+			expect<unknown>(readEntry(e)).toEqual({ status: "unparseable" });
+		}
+	}
+	const good = [
+		{ total: 0, nonBurstTotal: 0, burst: false },
+		{ total: 5, nonBurstTotal: 0, burst: true },
+		{ total: 5, nonBurstTotal: 2, burst: true, lastNonBurstTime: T0 },
+		{ total: 3, nonBurstTotal: 3, burst: false, lastNonBurstTime: T0 },
+	];
+	for (const form of good) {
+		const e = problemEntry({ confirm: form });
+		expect(validateEntry("npm", e).ok).toBe(true);
+		expect(readEntry(e).status).toBe("ok");
+	}
+});
+
+test("strict mode refuses a row with no current vote; the lenient reader keeps it", () => {
+	const empty = {
+		version: "1.0.0",
+		confirmTotal: 0,
+		confirmNonBurst: 0,
+		doesNotReproduceTotal: 0,
+		doesNotReproduceNonBurst: 0,
+	};
+	const e = problemEntry({ rows: [empty] });
+	expect<unknown>(validateEntry("npm", e)).toEqual({
+		ok: false,
+		error: "empty-row",
+	});
+	expect<unknown>(readEntry(e)).toEqual({
+		status: "ok",
+		value: e,
+		cleaned: false,
+	});
+	const oneVote = { ...empty, doesNotReproduceTotal: 1 };
+	expect(validateEntry("npm", problemEntry({ rows: [oneVote] })).ok).toBe(true);
+	const burstVote = { ...empty, confirmTotal: 1 }; // a burst vote still counts
+	expect(validateEntry("npm", problemEntry({ rows: [burstVote] })).ok).toBe(
+		true,
+	);
 });

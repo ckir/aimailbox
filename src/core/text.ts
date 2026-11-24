@@ -24,7 +24,10 @@ export function codePointLength(text: string): number {
 	return count;
 }
 
+/** Fails closed: NaN or a limit below 1 gives ""; a fractional limit is rounded down. */
 export function cutToBytes(text: string, maxBytes: number): string {
+	if (Number.isNaN(maxBytes)) return "";
+	maxBytes = Math.floor(maxBytes);
 	let bytes = 0;
 	let end = 0;
 	for (const char of text) {
@@ -35,11 +38,14 @@ export function cutToBytes(text: string, maxBytes: number): string {
 	return text.slice(0, end);
 }
 
+/** Fails closed: NaN or a limit below 1 gives ""; a fractional limit is rounded down. */
 export function cutToCodePoints(text: string, maxCodePoints: number): string {
+	if (Number.isNaN(maxCodePoints)) return "";
+	maxCodePoints = Math.floor(maxCodePoints);
 	let count = 0;
 	let end = 0;
 	for (const char of text) {
-		if (count === maxCodePoints) break;
+		if (count >= maxCodePoints) break;
 		count++;
 		end += char.length;
 	}

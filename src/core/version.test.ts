@@ -227,3 +227,13 @@ test("versions with equal row versions have equal row keys", () => {
 		}
 	}
 });
+
+test("versionsEqual is false for versions that are not valid, even where the text is equal", () => {
+	expect(versionsEqual("npm", "v", "")).toBe(false);
+	expect(versionsEqual("npm", "", "")).toBe(false);
+	expect(versionsEqual("npm", "v", "v")).toBe(true); // both valid: unchanged
+	expect(versionsEqual("tool", "v", "")).toBe(false);
+	expect(versionsEqual("go", "v", "")).toBe(false);
+	expect(versionsEqual("tool", "v1", "1")).toBe(true); // valid, unorderable: unchanged
+	expect(versionsEqual("tool", "abc", "abc")).toBe(true);
+});

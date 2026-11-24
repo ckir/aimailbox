@@ -21,7 +21,10 @@ export const MARK_RANK: Record<Mark, number> = {
 	resolved: 4,
 };
 
-/** The five keys of 12.5 for one entry. */
+/**
+ * The five keys of 12.5 for one entry. The `words` are folded again when they
+ * are matched, so callers may pass raw words or `queryWords` output.
+ */
 export function orderKeys(
 	ecosystem: Ecosystem,
 	entry: Entry,

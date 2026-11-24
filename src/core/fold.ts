@@ -25,11 +25,14 @@ export function queryWords(query: string): string[] {
 	return [...new Set(wordsOf(query))].slice(0, LIMITS.queryWords);
 }
 
-/** How many distinct `words` are among the words of `text`. */
+/**
+ * How many distinct `words` are among the words of `text`. Each word is folded
+ * again here, so callers may pass raw words or `queryWords` output.
+ */
 export function countMatches(words: readonly string[], text: string): number {
 	const present = new Set(wordsOf(text));
 	let count = 0;
-	for (const word of new Set(words)) {
+	for (const word of new Set(words.map(foldText))) {
 		if (present.has(word)) count += 1;
 	}
 	return count;

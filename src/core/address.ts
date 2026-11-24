@@ -148,7 +148,13 @@ function toolParts(name: string): { host: string; path: string } | undefined {
 	return { host: name.slice(0, slash), path: name.slice(slash + 1) };
 }
 
+// Only printable ASCII without space is allowed anywhere in a tool name, so the
+// parts canonicalisation discards (credentials, query, fragment, remote user)
+// are checked too: anything else is rejected, never repaired.
+const TOOL_NAME_CHARS = /^[!-~]*$/;
+
 function toolName(name: string): string | undefined {
+	if (!TOOL_NAME_CHARS.test(name)) return undefined;
 	const parts = toolParts(name);
 	if (parts === undefined) return undefined;
 	const host = asciiLower(parts.host);

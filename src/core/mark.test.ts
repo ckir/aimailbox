@@ -258,3 +258,85 @@ test("a vote for vv1.2.3 is a version of its own: it matches installed vv1.2.3, 
 	expect(markEntry("npm", e, "1.2.3")).not.toBe("disputed-on-your-version");
 	expect(markEntry("npm", e, "vv1.2.3")).toBe("disputed-on-your-version");
 });
+
+test("two rows of one version are summed alike by marks 3 and 4", () => {
+	const rowA = {
+		version: "1.2.0",
+		confirmTotal: 10,
+		confirmNonBurst: 10,
+		doesNotReproduceTotal: 0,
+		doesNotReproduceNonBurst: 0,
+	};
+	const rowB = {
+		version: "1.2.0",
+		confirmTotal: 0,
+		confirmNonBurst: 0,
+		doesNotReproduceTotal: 1,
+		doesNotReproduceNonBurst: 1,
+	};
+	// 10 confirms against 1 does-not-reproduce: not disputed, in either row order.
+	expect(markEntry("npm", problemEntry({ rows: [rowA, rowB] }), "1.2.0")).toBe(
+		"same-version",
+	);
+	expect(markEntry("npm", problemEntry({ rows: [rowB, rowA] }), "1.2.0")).toBe(
+		"same-version",
+	);
+	// 1 confirm against 10 does-not-reproduce, split over two rows: disputed.
+	const fewConfirm = { ...rowA, confirmTotal: 1, confirmNonBurst: 1 };
+	const manyDnr = {
+		...rowB,
+		doesNotReproduceTotal: 10,
+		doesNotReproduceNonBurst: 10,
+	};
+	expect(
+		markEntry("npm", problemEntry({ rows: [fewConfirm, manyDnr] }), "1.2.0"),
+	).toBe("disputed-on-your-version");
+	// equal sums are not disputed (strictly greater is needed)
+	const tie = {
+		...rowB,
+		doesNotReproduceTotal: 10,
+		doesNotReproduceNonBurst: 10,
+	};
+	expect(markEntry("npm", problemEntry({ rows: [rowA, tie] }), "1.2.0")).toBe(
+		"same-version",
+	);
+	// a version written two ways counts as one version
+	expect(
+		markEntry(
+			"npm",
+			problemEntry({ rows: [rowA, { ...rowB, version: "v1.2.0+b" }] }),
+			"1.2.0",
+		),
+	).toBe("same-version");
+});
+test("mark 4 by rows needs a non-zero sum of confirmNonBurst over the rows of the installed version", () => {
+	const dnr = {
+		version: "1.2.0",
+		confirmTotal: 0,
+		confirmNonBurst: 0,
+		doesNotReproduceTotal: 0,
+		doesNotReproduceNonBurst: 0,
+	};
+	const some = { ...dnr, confirmTotal: 1, confirmNonBurst: 1 };
+	expect(markEntry("npm", problemEntry({ rows: [dnr, some] }), "1.2.0")).toBe(
+		"same-version",
+	);
+	expect(markEntry("npm", problemEntry({ rows: [dnr, dnr] }), "1.2.0")).toBe(
+		"unknown",
+	);
+	expect(markEntry("npm", problemEntry({ rows: [some] }), "1.2.1")).toBe(
+		"unknown",
+	);
+});
+
+test("an invalid installed version is never the same version as a recorded one", () => {
+	expect(markEntry("npm", problemEntry({ reportedVersion: "v" }), "")).toBe(
+		"unknown",
+	);
+	expect(markEntry("tool", problemEntry({ reportedVersion: "v" }), "")).toBe(
+		"unknown",
+	);
+	expect(markEntry("npm", problemEntry({ reportedVersion: "v" }), "v")).toBe(
+		"same-version",
+	);
+});

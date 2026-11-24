@@ -145,3 +145,33 @@ test("tool refuses, never repairs", () => {
 	])
 		bad(`tool/${input}`);
 });
+
+const NUL = String.fromCharCode(0);
+const BIDI = String.fromCharCode(0x202e);
+test("a tool name with a character outside printable ASCII is refused, even in a discarded part", () => {
+	bad(`tool/https://a b${NUL}@github.com/org/repo`); // credentials
+	bad("tool/https://github.com/org/repo# bad\ntext"); // fragment
+	bad(`tool/https://github.com/org/repo?x=1${BIDI}`); // query
+	bad(`tool/${NUL}@github.com:org/repo`); // remote user
+	bad("tool/café@github.com:org/repo"); // remote user, non-ASCII
+	bad("tool/https://github.com/org/repo?x=a b"); // a space alone
+	bad("tool/github.com/org/repo\n"); // a trailing line feed
+	bad("tool/github.com/org/repo\t");
+	bad("tool/https://github.com/org/repo#é");
+});
+test("a tool name with a query, fragment, user or port is still accepted when printable", () => {
+	ok("tool/https://github.com/org/repo?x=1", "tool/github.com/org/repo");
+	ok("tool/https://user@github.com/org/repo#frag", "tool/github.com/org/repo");
+	ok("tool/git@github.com:org/repo", "tool/github.com/org/repo");
+	ok("tool/https://github.com:8443/org/repo", "tool/github.com/org/repo");
+});
+test("the stray-character rule applies to the tool prefix only", () => {
+	expect<unknown>(canonicalise(`npm/left${NUL}pad`)).toEqual({
+		ok: false,
+		error: "bad-name",
+	});
+	expect<unknown>(canonicalise("tool/github.com/org/repo")).toEqual({
+		ok: true,
+		value: "tool/github.com/org/repo",
+	});
+});

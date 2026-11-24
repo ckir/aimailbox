@@ -187,3 +187,11 @@ test("key 4: a note with no confirmation sorts by its time written, between note
 		numbers(sortEntries("npm", [early, unconfirmed, late], undefined, "")),
 	).toEqual([1, 3, 2]);
 });
+
+test("key 1 folds the given words: raw and folded words count alike", () => {
+	expect(orderKeys("npm", workedEntry, "1.2.1", ["Lock"]).words).toBe(1);
+	expect(orderKeys("npm", workedEntry, "1.2.1", ["LOCK", "FILE"]).words).toBe(
+		2,
+	);
+	expect(orderKeys("npm", workedEntry, "1.2.1", ["lock"]).words).toBe(1);
+});

@@ -147,6 +147,8 @@ function parseForm(raw: unknown, strict: boolean): FormCounts {
 	const burst = field(raw, "burst");
 	if (typeof burst !== "boolean") throw new Fault("bad-type");
 	if (nonBurstTotal > total) throw new Fault("bad-number");
+	// 12.3: the burst flag is set exactly while some current vote is a burst arrival.
+	if (burst !== total > nonBurstTotal) throw new Fault("bad-number");
 	const last = field(raw, "lastNonBurstTime");
 	if (nonBurstTotal === 0) {
 		if (last !== undefined) throw new Fault("bad-number");
@@ -189,6 +191,9 @@ function parseRows(
 		)
 			throw new Fault("bad-number");
 		if (ecosystem !== undefined) {
+			// 12.3: the service leaves out versions with no current vote.
+			if (row.confirmTotal === 0 && row.doesNotReproduceTotal === 0)
+				throw new Fault("empty-row");
 			if (rowVersion(ecosystem, v) !== v) throw new Fault("bad-row-key");
 			const key = rowKey(ecosystem, v);
 			if (keys.has(key)) throw new Fault("duplicate-row");
@@ -204,8 +209,11 @@ function parseTags(raw: unknown, strict: boolean): WarningTag[] {
 		throw new Fault("bad-type");
 	const known = (t: string): t is WarningTag =>
 		(WARNING_TAGS as readonly string[]).includes(t);
-	const tags = (raw as string[]).filter(known);
-	if (strict && tags.length !== raw.length) throw new Fault("unknown-tag");
+	const present = (raw as string[]).filter(known);
+	if (strict && present.length !== raw.length) throw new Fault("unknown-tag");
+	// Lenient: the first occurrence of each known tag is kept, later ones dropped.
+	const tags = present.filter((t, i) => present.indexOf(t) === i);
+	if (strict && tags.length !== present.length) throw new Fault("bad-tags");
 	return tags;
 }
 

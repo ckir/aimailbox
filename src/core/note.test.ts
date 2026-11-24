@@ -236,3 +236,30 @@ test("unknown format versions print nothing; broken structure is unparseable", (
 			status: "unparseable",
 		});
 });
+
+test("a published note's warning tags keep the first occurrence of each known tag and stay bounded", () => {
+	const many = Array(1000).fill("edits-executable");
+	const r = readPublishedNote({ ...published, warningTags: many });
+	expect<unknown>(r).toEqual({
+		status: "ok",
+		value: { ...published, warningTags: ["edits-executable"] },
+		cleaned: false,
+	});
+	const mixed = readPublishedNote({
+		...published,
+		warningTags: [
+			"network-or-install",
+			"bogus",
+			"disables-check",
+			"network-or-install",
+		],
+	});
+	expect<unknown>(mixed).toEqual({
+		status: "ok",
+		value: {
+			...published,
+			warningTags: ["network-or-install", "disables-check"],
+		},
+		cleaned: false,
+	});
+});

@@ -299,8 +299,10 @@ export function readPublishedNote(value: unknown): ReadResult<PublishedNote> {
 
 	out.noteNumber = noteNumber;
 	out.timeWritten = timeWritten;
-	out.warningTags = tags.filter((t): t is WarningTag =>
+	const knownTags = tags.filter((t): t is WarningTag =>
 		(WARNING_TAGS as readonly string[]).includes(t),
 	);
+	// The first occurrence of each known tag is kept, later ones dropped.
+	out.warningTags = knownTags.filter((t, i) => knownTags.indexOf(t) === i);
 	return { status: "ok", value: out as PublishedNote, cleaned };
 }

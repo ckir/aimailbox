@@ -84,11 +84,14 @@ function isDisputedOnYourVersion(
 	installed: string | undefined,
 ): boolean {
 	if (installed === undefined) return false;
-	return entry.rows.some(
-		(row) =>
-			versionsEqual(ecosystem, row.version, installed) &&
-			row.doesNotReproduceNonBurst > row.confirmNonBurst,
-	);
+	let confirm = 0;
+	let doesNotReproduce = 0;
+	for (const row of entry.rows) {
+		if (!versionsEqual(ecosystem, row.version, installed)) continue;
+		confirm += row.confirmNonBurst;
+		doesNotReproduce += row.doesNotReproduceNonBurst;
+	}
+	return doesNotReproduce > confirm;
 }
 
 function isSameVersion(
@@ -101,10 +104,14 @@ function isSameVersion(
 		v !== undefined && versionsEqual(ecosystem, installed, v);
 	if (entry.kind === "question") return same(entry.version);
 	if (entry.kind !== "problem") return false;
+	let confirm = 0;
+	for (const row of entry.rows) {
+		if (same(row.version)) confirm += row.confirmNonBurst;
+	}
 	return (
 		same(entry.reportedVersion) ||
 		same(entry.authorObservedVersion) ||
-		entry.rows.some((row) => row.confirmNonBurst !== 0 && same(row.version))
+		confirm !== 0
 	);
 }
 

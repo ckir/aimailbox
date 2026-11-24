@@ -124,7 +124,11 @@ export function versionsEqual(
 	if (canOrder(ecosystem, a) && canOrder(ecosystem, b)) {
 		return compareVersions(ecosystem, a, b) === 0;
 	}
-	return stripLeadingV(a) === stripLeadingV(b);
+	return (
+		isValidVersion(a) &&
+		isValidVersion(b) &&
+		stripLeadingV(a) === stripLeadingV(b)
+	);
 }
 
 /** One leading "v" removed; where versions order, the "+build" part is removed too. */
