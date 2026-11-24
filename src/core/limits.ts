@@ -1,0 +1,29 @@
+export const FORMAT_VERSION = 1;
+export const WARNING_TAGS = [
+	"network-or-install",
+	"config-or-credential",
+	"disables-check",
+	"indirect-execution",
+	"edits-executable",
+] as const;
+export type WarningTag = (typeof WARNING_TAGS)[number];
+export const LIMITS = {
+	summaryCodePoints: 120, // spec 7
+	failureSignatureBytes: 200,
+	whatWasDoneBytes: 800,
+	whatHappenedBytes: 800,
+	whatWasExpectedBytes: 400,
+	workaroundBytes: 800,
+	freeTextBytes: 2000,
+	noteTextBytes: 4096, // all text fields of one note together
+	versionChars: 64, // spec 12.1
+	rawAddressBytes: 1024,
+	addressBytes: 256,
+	versionRows: 16,
+	entriesPerDigestPage: 50,
+	summariesPerGroup: 10, // spec 7
+	repliesPerGroup: 10,
+	unknownFormatListed: 10,
+	queryWords: 8,
+	notReproducedThreshold: 3, // spec 12.4
+} as const;

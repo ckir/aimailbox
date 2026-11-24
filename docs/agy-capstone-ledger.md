@@ -4,16 +4,17 @@ One row per completed capstone review: an adversarial review of committed code b
 peer, with every finding measured by the driver before it was fixed. The range's right-hand
 commit is the one that was reviewed and confirmed.
 
-| Date       | Range                                                                    | Rounds | Verdict                               | Evidence                                                                                                                               |
-| ---------- | ------------------------------------------------------------------------ | ------ | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-11-23 | 1832d1e..8233938 (toolchain scaffold)                                    | 5      | ALIGNED, GREEN confirmed by the owner | Fold commits 78bbe87, e5fc0ff, d814313, 69148e5, 8233938. Round 5 was clean and narrowed to 8233938.                                   |
-| 2026-11-23 | 54cfa2a..b060561 (toolchain tests and their placement)                   | 5      | ALIGNED, GREEN confirmed by the owner | Fold commits bcb9065, 941ddee, 5dbe7c7, b060561; placement commit 2363944. Round 5 was clean and narrowed to b060561.                  |
-| 2026-11-23 | 8248cb5..b7020c6 (second-audit tests)                                    | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit b7020c6; docs-only follow-up 9e22619. Round 2 found no defect in the test code.                                            |
-| 2026-11-23 | f78d7d8..4034060 (CODEOWNERS, SHA pins, commit-msg hook, local lefthook) | 4      | ALIGNED, GREEN confirmed by the owner | Fold commits 4f31e38, f3b6a52, 4034060 on top of 8dda991. Rounds 3 and 4 were clean.                                                   |
-| 2026-11-23 | cd68f70..eb72824 (message-file check, wider CODEOWNERS)                  | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit eb72824 on top of f8e716f; comment-only follow-up c506136. Round 2 found no runtime defect.                                |
-| 2026-11-23 | eb72824..2864a53 (third-audit tests)                                     | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit 2864a53 on top of 4ef8467 and bd49af6. Round 2 was clean.                                                                  |
-| 2026-11-23 | 2864a53..e663346 (four more CODEOWNERS entries)                          | 0      | WAIVED by the owner, no review run    | Commit e663346: four CODEOWNERS lines and the matching test entries; removing any one entry fails two tests.                           |
-| 2026-11-23 | 49cd040..4b444fa (fake token generator without modulo)                   | 0      | WAIVED by the owner, no review run    | Commit 4b444fa: fixes CodeQL alert js/biased-cryptographic-random in tests/toolchain/helpers.ts; CI and CodeQL pass on pull request 5. |
+| Date       | Range                                                                    | Rounds | Verdict                               | Evidence                                                                                                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------ | ------ | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-11-23 | 1832d1e..8233938 (toolchain scaffold)                                    | 5      | ALIGNED, GREEN confirmed by the owner | Fold commits 78bbe87, e5fc0ff, d814313, 69148e5, 8233938. Round 5 was clean and narrowed to 8233938.                                                                                                                   |
+| 2026-11-23 | 54cfa2a..b060561 (toolchain tests and their placement)                   | 5      | ALIGNED, GREEN confirmed by the owner | Fold commits bcb9065, 941ddee, 5dbe7c7, b060561; placement commit 2363944. Round 5 was clean and narrowed to b060561.                                                                                                  |
+| 2026-11-23 | 8248cb5..b7020c6 (second-audit tests)                                    | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit b7020c6; docs-only follow-up 9e22619. Round 2 found no defect in the test code.                                                                                                                            |
+| 2026-11-23 | f78d7d8..4034060 (CODEOWNERS, SHA pins, commit-msg hook, local lefthook) | 4      | ALIGNED, GREEN confirmed by the owner | Fold commits 4f31e38, f3b6a52, 4034060 on top of 8dda991. Rounds 3 and 4 were clean.                                                                                                                                   |
+| 2026-11-23 | cd68f70..eb72824 (message-file check, wider CODEOWNERS)                  | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit eb72824 on top of f8e716f; comment-only follow-up c506136. Round 2 found no runtime defect.                                                                                                                |
+| 2026-11-23 | eb72824..2864a53 (third-audit tests)                                     | 2      | ALIGNED, GREEN confirmed by the owner | Fold commit 2864a53 on top of 4ef8467 and bd49af6. Round 2 was clean.                                                                                                                                                  |
+| 2026-11-23 | 2864a53..e663346 (four more CODEOWNERS entries)                          | 0      | WAIVED by the owner, no review run    | Commit e663346: four CODEOWNERS lines and the matching test entries; removing any one entry fails two tests.                                                                                                           |
+| 2026-11-23 | 49cd040..4b444fa (fake token generator without modulo)                   | 0      | WAIVED by the owner, no review run    | Commit 4b444fa: fixes CodeQL alert js/biased-cryptographic-random in tests/toolchain/helpers.ts; CI and CodeQL pass on pull request 5.                                                                                 |
+| 2026-11-24 | 22c1d0a..80eb929 (mailbox core, plan 1)                                  | 6      | ALIGNED, GREEN confirmed by the owner | Fold commits fc908ef (final review), eaafee9, 3afcabe, ac4e095, c24a870, bdb5cdd. Round 6 was clean. Reviewed as f19d1fd..860f84d before the branch was rewritten; every replayed commit has the tree of its original. |
 
 ## Notes for the 2026-11-23 review
 
@@ -92,3 +93,25 @@ commit is the one that was reviewed and confirmed.
 - Known: the commit message of 4ef8467 said the job had no custom shell when only the steps
   were checked; 2864a53 closes it. The check that no CI script contains `||` is deliberately
   blunt and fails closed.
+
+## Notes for the review of the mailbox core (22c1d0a..80eb929)
+
+- Findings: the final whole-branch review found one critical defect (a table row version that
+  was not stable under a second removal of a leading `v`); rounds 1 to 4 found real defects in
+  tool addresses, duplicate rows and tags, `countMatches`, the go and npm name rules, and twice in
+  the `gopkg.in` canonical form (a fold of round 3 newly refused valid names, fixed in round 4 by
+  one self-checked element rule); round 5 found test-side gaps only and one quadratic loop
+  already fixed; round 6 found nothing.
+- Shared context: all six rounds ran in one peer conversation, so no round was independent of
+  the earlier ones. The peer ran no code; every finding and every suggested fix was measured by
+  the driver, and two findings were rejected by a mutant.
+- The documents-only commit fba756b (a line in `TODO.md`) came after the reviewed range. The
+  marker records 80eb929, the replayed form of the reviewed tip 860f84d.
+- Known and parked: strict-fault tests assert only that a result is not ok; default-ignorable
+  characters survive the forbidden-character rule of spec 7.1 (the owner decided on 2026-11-24 to
+  forbid them, landing with plan 2); no box for legacy npm names with `! ' ( ) *` or for dotless
+  `tool` hosts; `gopkg.in/pkg.v2.foo.v3` is refused although Go accepts it; a combining mark
+  splits a word under 12.5.
+- Not covered: storage and HTTP round trips, case-insensitive file systems, Unicode-version
+  skew between client and service, randomised property tests of the non-address modules (the
+  last is added before the test audit).

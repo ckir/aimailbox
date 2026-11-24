@@ -36,3 +36,23 @@ Remove an entry when it is closed.
   every pull request. Anchor: `tests/gate/ci.test.ts`.
 - **`src/index.ts` and `src/index.test.ts` are placeholders** with one trivial test.
   Compensation: none needed until product code exists (owner, 2026-11-23).
+
+## Mailbox core (`src/core`, plan 1)
+
+Plan 1 is pure code with no I/O, so these three gaps cannot be tested there. Each belongs to
+the plan that builds the code it needs, and is closed (and removed here) when that plan's
+tests cover it.
+
+- **Storage and HTTP round trips are not tested.** Notes, digest pages and rows are checked
+  as values and as JSON round trips, not through files or the wire. Compensation:
+  `contract.test.ts` feeds a JSON round-tripped digest page into `lookupGroup`. Owner:
+  plans 2 and 4 (owner, 2026-11-25). Anchor: `src/core/contract.test.ts`.
+- **Box names that differ only in case are not tested as file names.** `npm/MEAN` and
+  `npm/mean` are two boxes, so on a case-insensitive file system they would be one
+  file. Compensation: `address.test.ts` pins that the two names stay distinct; the file
+  layer does not exist yet. Owner: plan 2 (owner, 2026-11-25). Anchor:
+  `src/core/address.test.ts`, test "npm keeps case, so MEAN and mean are two boxes".
+- **Unicode-version skew between a client and the service is not tested.** The forbidden
+  set (spec 7.1) follows the Unicode version of the running Bun, 17.0 on Bun 1.4.4.
+  Compensation: none in plan 1. Owner: plans 4 and 5 (owner, 2026-11-25). Anchor:
+  `src/core/text.ts`, `FORBIDDEN`.
