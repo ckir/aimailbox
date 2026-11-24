@@ -241,10 +241,13 @@ human confirmation (8.3 to 8.5).
    (Appendix A) and are fixed from format version 1, because a different rule later would give
    an existing note another box. In particular: an `npm` scope may start with `.` but a package
    part may not; a name with `!`, `'`, `(`, `)` or `*`, which npm's legacy rules still allow,
-   has no box; a `go` final element is read as a major-version element only when it is `v`
-   followed by digits and dots (so `v8.dev` and `v1.x` are ordinary elements, and `v0` and `v1`
-   are refused); the last element of a `gopkg.in` path is read by one rule that removes `.vN`
-   and `-unstable` and is checked against its own result, so a name with an internal `.vN.word`
+   has no box; in a `go` path of a host and at least one more element, a final element made of
+   `v` followed by digits and dots is a version element: `/vN` for N of 2 or more is removed,
+   and `v0`, `v1`, `v1.2` and the like are refused, while any other element, `v8.dev` and
+   `v1.x` included, is an ordinary one (a single element is a host); the last element of a
+   `gopkg.in` path is read by one rule that removes a trailing `.vN`, together with a `-unstable`
+   after it when N is 1 or more, and is checked against its own result, so `-unstable` without
+   a `.vN` stays part of the name, `.v0-unstable` is refused, a name with an internal `.vN.word`
    segment has no box and an unversioned `gopkg.in/<name>` is accepted; a `tool` host needs a
    dot, so `localhost` and other dotless hosts have no box. The canonical form of an accepted
    address is itself accepted and unchanged. A bare `npm` name typed in the wrong case is
@@ -786,8 +789,8 @@ name reach users inside the released client.
    with no current vote; a client never drops rows. Rows are keyed by version as compared under
    rule 4. A row's `version` field is that key, except where the key would not be a valid
    version or would change when one more leading `v` is removed (a vote whose version is `v` or
-   `vv`): then the row carries the version as written, and a version that is invalid as written
-   is carried as written. The tie-break below compares the carried strings. When the table would exceed its bound, whole rows are dropped: first the rows whose
+   `vv`): then the row carries the version as written. A version that is invalid as written has
+   no row (12.1). The tie-break below compares the carried strings. When the table would exceed its bound, whole rows are dropped: first the rows whose
    version cannot be ordered, least recent first by the latest arrival among their current
    counted votes, ties broken by dropping first the version string that is lower in byte order; then the rows whose version can be
    ordered, oldest version first. In a box whose versions are never ordered every row is of
@@ -950,7 +953,11 @@ Secrets in fixtures are generated at run time, as the repository already require
 - Added after the audit of revision 7. `npm/MEAN` and `npm/mean` are two boxes; a `go` path
   keeps its case after the host; a `gopkg.in` path loses `.v2`; a `user@host:path` remote and
   its HTTPS form give one `tool` address; a name with a character outside its prefix's set is
-  rejected (6.2 rule 7). Each forbidden category is removed, each line-end form becomes one
+  rejected (6.2 rule 7); the name rules of 6.2 rule 7 hold for the limits it lists (a scope that
+  starts with a dot, a name with a legacy character, a dotless `tool` host, a `gopkg.in` name
+  with an internal `.vN.word` segment, `go` finals such as `v1.2`, `v8.dev`). Each forbidden
+  category is removed, so is each default-ignorable code point (for example U+034F, U+3164,
+  U+FE0F, U+E0100: a filler inside a word no longer keeps it from matching), each line-end form becomes one
   line feed, text is not normalised, and a cut never splits a code point (7.1). An entry of an
   unknown format version is reported after the order and outside the cap (7.1). A range that
   confirmed cannot also be counted as not reproducing (11.2 rule 3). The burst window at its
@@ -1052,7 +1059,8 @@ To the builder:
   package layout, the canonicalisation module (6.2), the note and digest formats with their
   validation (6, 7.1, 12.1, 12.2, 12.3, 14), the marking and ordering functions (12.4, 12.5),
   and their tests. Plans after it, agreed by both agents on 2026-11-24, each shown to the owner
-  for approval: plan 2, a local-only slice (the scanner, the shared warning-tag rules, the draft
+  for approval: plan 2, a local-only slice (the default-ignorable rule of 7.1 in the text
+  module, with its tests, as its first task; the scanner, the shared warning-tag rules, the draft
   lock, the policy file and repository veto, the local store, version detection, the rendered
   summaries, lookup and send over local notes only, setup and the always-on rule for both
   harnesses; no network and no stranger's text), which ends with a period of real use on both
@@ -1067,15 +1075,18 @@ To the builder:
 - Notes for the plan that signs format 1: bind each hashed file to its box address in the signed
   manifest (no `box` field inside an entry or a note); strict service-side checks of the
   per-note files and of the digest page wrapper; whether the reader refuses two rows whose
-  versions differ only by a leading `v` (the reader has no ecosystem, so it cannot today).
+  versions differ only by a leading `v` (it needs no ecosystem, but the reader skips every
+  row-key check today because the key of a version depends on the ecosystem).
 - Note for plan 2: when a draft is saved because the policy denies sending, the client prints
-  the exact one-line command that allows sending from that directory, so the default deny of
+  the exact one-line command that allows sending from that directory, addressed to the human to
+  run in an interactive terminal (an agent never runs it, 8.4 and 8.5), so the default deny of
   8.4 has a short path to a scoped allow; the always-on rule and the output of lookup and send
   are drafted and read by both agents before they are built.
 - Known limits of format version 1, accepted on 2026-11-24 and listed in the plan-1 ledger:
-  the address limits of 6.2 rule 7; the forbidden-character set follows Unicode 17.0 and the
-  categories and normal forms come from the runtime's own Unicode version (a client and a
-  service on different versions can disagree on a code point, which fails closed).
+  the address limits of 6.2 rule 7; the forbidden-character set and the normal forms of the
+  text module come from the runtime's own Unicode version, 17.0 on the Bun 1.4.4 measured
+  (only the case folding table is pinned to 17.0.0), so a client and a service on different
+  versions can disagree on a code point, which fails closed.
 
 Required checks at the source before the plan that depends on them. Agreed timing, 2026-11-24:
 every harness check below (both Claude Code and Antigravity) before plan 2; SQLite removal
@@ -1106,8 +1117,8 @@ abuse terms at plan 4's review; the domain at plan 6.
 - A look at the hosting provider's abuse terms before launch (10.10 c).
 - The thresholds for the measurements in 13.2, before they are run.
 - Settled 2026-11-24 by the owner ("change it to \"a machine the owner also uses for other
-  work\""): the description of the owner's machine (4, 10.8, 13.3) is general. Earlier commits
-  of this branch still hold the detailed wording, so the branch is squashed before it is pushed.
+  work\""): the description of the owner's machine (4, 10.8, 13.3) is general. The branch was
+  rewritten on 2026-11-24, before any push, so that no commit holds the detailed wording.
 - Not run: a seventh, narrow panel round over the rules added in revision 7 (Appendix A). The
   owner was offered it, approved without asking for it, and can ask for it at any time.
 
@@ -1443,13 +1454,19 @@ six"). The revision changes what a reader or a writer accepts, so it is not edit
 - 6.2 rule 7 states the name rules as the first plan implements them after six capstone rounds
   and a differential test against the registries' own code (npm validate-npm-package-name 8.0.0,
   golang.org/x/mod 0.42.0), and freezes them for format version 1.
-- 12.3 states what a table row's `version` carries (the plan found that a vote whose version is
-  `v` made a row key that changed under a second removal of a `v`, so the page could not be read
-  back); 12.5 notes that a combining mark splits a word.
+- 12.3 states what a table row's `version` carries (the plan found that a vote whose version
+  starts with `vv` made a row key that changed under a second removal of a `v`, and that `v`
+  alone made an empty key, so the page could not be read back); 12.5 notes that a combining mark splits a word.
 - Section 15 records the plans after the first and when each owner item is asked, the notes for
   the signing plan, the note for plan 2 about a path from deny to a scoped allow, and the
   agreed timing of the source checks.
   Not reviewed by a panel: the owner approved a read of the diff by the second agent instead.
+  That read found ten places where the new text said more or less than the code or another
+  section; each was measured and all ten are folded: invalid versions have no row (12.3);
+  `-unstable` goes only with a `.vN` of 1 or more; `go` finals need a host and a further element;
+  13.1 names the default-ignorable proof; plan 2 owns the text-module change; the Unicode
+  version note; the leading-`v` duplicate note; the printed allow command is for the human; the
+  squash is done; the `v` and `vv` wording of this paragraph.
 
 ## Stand-downs
 
