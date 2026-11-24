@@ -11,6 +11,7 @@ Conventions: the newest row goes at the bottom, and a `|` inside a cell is writt
 | ---------- | ------------------------------------------------------------------------- | ------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | 2026-11-23 | 1832d1e..ea937b3 (toolchain scaffold and its tests)                       | 2      | GAPS FOUND, all closed | Fold commits 8becf24, ab9abf0, ea937b3. Briefs: .clavity/seams/toolchain-scaffold-test-audit.md and -test-audit-r2.md. |
 | 2026-11-23 | ea937b3..2864a53 (CODEOWNERS, SHA pins, commit-msg hook, pinned lefthook) | 1      | GAPS FOUND, all closed | Fold commits 4ef8467, bd49af6, 2864a53. Brief: .clavity/seams/toolchain-scaffold-test-audit-r3.md.                     |
+| 2026-11-24 | 22c1d0a..65516d8 (mailbox core, plan 1: unit and property tests)          | 2      | GAPS FOUND, all closed | Fold commit 65516d8. Briefs: .clavity/seams/agent-mailbox-core-test-audit.md and -test-audit-r2.md.                    |
 
 ## Notes for the 2026-11-23 audit
 
@@ -49,3 +50,23 @@ Conventions: the newest row goes at the bottom, and a `|` inside a cell is writt
   path starts with a hyphen).
 - Not examined: Windows and macOS; the audit was one round and was not re-run on the new
   tests. The audit raises the floor; it does not prove no gap remains.
+
+## Notes for the 2026-11-24 audit of the mailbox core
+
+- Round 1 (the 13 unit-test files) claimed four gaps; measured by logic mutants in a copy of
+  `src/core`. Closed with test code only, in `65516d8`: a question marked resolved for a version
+  was untested by `markEntry` (a mutant survived all 208 tests); a digest page read from the wire
+  was never fed into a lookup (a mutant dropping a question's version in `readDigestPage` survived);
+  one lookup test counted what it listed instead of naming it. Refuted: that `order.test.ts` never
+  ranks questions or replies (five mutants of `orderKeys` were all killed by existing tests).
+- Round 2 (the property tests and the round 1 fixes) claimed four gaps; all four refuted. The mutants
+  that agy said survived the 47 property tests (an installed version of `undefined` or older still
+  resolving; reversed drop order of unorderable rows; mark ranks 3 and 4 never generated) are each
+  killed by a named unit test, and ten mutants of `address.ts` are all killed, among them the
+  fixed-point tests over a grammar in `address-go-tool.test.ts`.
+- No source file changed, so the capstone of the range still stands.
+- Discarded below the floor: `status.test.ts` does not pin `s.rows[15]` (a property test does);
+  `ecosystemOf` is not asserted for cargo, pypi and tool (it is unreachable except through
+  `isCanonical`).
+- Not examined: the Unicode version of the Bun runtime against the folded tables; storage, HTTP and
+  file-system behaviour (plans 2 to 5). The audit raises the floor; it does not prove no gap remains.
