@@ -83,6 +83,11 @@ const CASES: Record<
 		secret: randomAlnum(24),
 		nearMiss: "the request sent Cookie: a=b to the host",
 	},
+	"docker-auth": {
+		draft: (s) => `the config had "auth": "${s}" in it`,
+		secret: `${randomAlnum(24)}==`,
+		nearMiss: 'the config had "auth": "short" in it',
+	},
 };
 
 describe("scanOutgoing secrets", () => {
@@ -285,6 +290,138 @@ describe("scanOutgoing secrets", () => {
 		}
 	});
 
+	test("url-credentials accepts an empty user before the colon (R30)", () => {
+		for (const text of [
+			`redis://:${randomAlnum(20)}@localhost:6379/0`,
+			`http://:${randomAlnum(12)}@host/`,
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["url-credentials"],
+			});
+		}
+		for (const text of [
+			"curl http://localhost:8080/path and https://host:443/a@b",
+			"https://github.com/org/repo",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("secret-assignment covers credential, account key and shared access key names (R31a)", () => {
+		for (const text of [
+			`credential: "${randomAlnum(32)}"`,
+			`credentials = ${randomAlnum(20)}`,
+			`DefaultEndpointsProtocol=https;AccountName=myacc;AccountKey=${randomAlnum(30)}==;EndpointSuffix=core.windows.net`,
+			`SharedAccessKey=${randomAlnum(30)}`,
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["secret-assignment"],
+			});
+		}
+		for (const text of [
+			"credential: invalid",
+			"the credentials are required",
+			"auth: authentication failed",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("docker-auth finds the auth field of a Docker config (R31b)", () => {
+		const config = `{"auths": {"https://index.docker.io/v1/": {"auth": "${randomAlnum(24)}=="}}}`;
+		expect<unknown>(scanOutgoing(config, EMPTY)).toEqual({
+			outcome: "secret",
+			rules: ["docker-auth"],
+		});
+		for (const text of ['"auth": "short"', '{"auth": true}']) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("api-key-prefix covers more provider key formats (R32)", () => {
+		const samples: [string, string][] = [
+			[
+				`${"S" + "G."}${randomAlnum(22)}.${randomAlnum(22)}`,
+				`${"S" + "G."}${randomAlnum(10)}.${randomAlnum(22)}`,
+			],
+			[
+				`${"r" + "k_live_"}${randomAlnum(24)}`,
+				`${"r" + "k_live_"}${randomAlnum(8)}`,
+			],
+			[
+				`${"s" + "k_test_"}${randomAlnum(24)}`,
+				`${"s" + "k_test_"}${randomAlnum(8)}`,
+			],
+			[
+				`${"gl" + "pat-"}${randomAlnum(24)}`,
+				`${"gl" + "pat-"}${randomAlnum(8)}`,
+			],
+			[
+				`${"py" + "pi-AgEI"}${randomAlnum(40)}`,
+				`${"py" + "pi-AgEI"}${randomAlnum(8)}`,
+			],
+			[`${"h" + "f_"}${randomAlnum(34)}`, `${"h" + "f_"}${randomAlnum(10)}`],
+			[
+				`${"do" + "p_v1_"}${randomAlnum(40)}`,
+				`${"do" + "p_v1_"}${randomAlnum(8)}`,
+			],
+			[
+				`${"sh" + "pat_"}${randomAlnum(32)}`,
+				`${"sh" + "pat_"}${randomAlnum(8)}`,
+			],
+			[
+				`${"sh" + "pss_"}${randomAlnum(32)}`,
+				`${"sh" + "pxx_"}${randomAlnum(32)}`,
+			],
+		];
+		for (const [secret, nearMiss] of samples) {
+			expect<unknown>(scanOutgoing(`I pasted ${secret} here`, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["api-key-prefix"],
+			});
+			expect<unknown>(scanOutgoing(`I pasted ${nearMiss} here`, EMPTY)).toEqual(
+				{ outcome: "clean" },
+			);
+		}
+	});
+
+	test("cookie-header skips the standard cookie attribute names (R33)", () => {
+		for (const text of [
+			"Set-Cookie: path=/api/v2/organizations/settings",
+			"Cookie: domain=subdomain.example.com",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+		for (const text of [
+			`Set-Cookie: sid=${randomAlnum(24)}; Path=/`,
+			`Cookie: session=${randomAlnum(30)}`,
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["cookie-header"],
+			});
+		}
+	});
+
+	test("ordinary technical text stays clean", () => {
+		const sha = Array.from({ length: 40 }, () =>
+			"0123456789abcdef".charAt(Math.floor(Math.random() * 16)),
+		).join("");
+		for (const text of [
+			`fixed in commit ${sha} on main`,
+			`the id is ${crypto.randomUUID()} in the log`,
+			"curl http://localhost:8080/path",
+			"see /home/user/project/src/index.ts line 12",
+			"version 1.2.3-beta.4+build.5",
+			"error: token expired",
+			"The Authorization header uses the Token scheme, see RFC 7235",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
 	test("private-key-block also matches the PGP block header", () => {
 		const header = `${"-----BEGIN " + "PGP PRIV"}${"ATE KEY BL" + "OCK-----"}`;
 		expect<unknown>(
@@ -316,6 +453,7 @@ describe("scanOutgoing secrets", () => {
 			"url-credentials",
 			"secret-assignment",
 			"cookie-header",
+			"docker-auth",
 			"env-value",
 		]);
 	});

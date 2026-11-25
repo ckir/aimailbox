@@ -58,6 +58,13 @@ const PATTERN_RULES: readonly PatternRule[] = [
 			/\bsk-[A-Za-z0-9_-]{20,}/,
 			/\bsk_live_[A-Za-z0-9]{16,}/,
 			/\bAIza[0-9A-Za-z_-]{35}\b/,
+			/\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}/,
+			/\b(?:rk|sk)_(?:live|test)_[A-Za-z0-9]{16,}/,
+			/\bglpat-[A-Za-z0-9_-]{20,}/,
+			/\bpypi-AgEI[A-Za-z0-9_-]{20,}/,
+			/\bhf_[A-Za-z0-9]{30,}/,
+			/\bdop_v1_[A-Za-z0-9]{20,}/,
+			/\bshp(?:at|ca|pa|ss)_[A-Za-z0-9]{20,}/,
 		],
 	},
 	{
@@ -74,20 +81,21 @@ const PATTERN_RULES: readonly PatternRule[] = [
 	},
 	{
 		name: "url-credentials",
-		patterns: [/:\/\/[^/\s:@]+:[^/\s@]+@/, /:\/\/[A-Za-z0-9._~%+=-]{20,}@/],
+		patterns: [/:\/\/[^/\s:@]*:[^/\s@]+@/, /:\/\/[A-Za-z0-9._~%+=-]{20,}@/],
 	},
 	{
 		name: "secret-assignment",
 		patterns: [
-			/(?:password|passwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|secret[_-]?access[_-]?key)["']?\s*[:=]\s*(?:"[^"\n]{12,}"|'[^'\n]{12,}'|["']?[^\s"']{12,})/i,
+			/(?:password|passwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|secret[_-]?access[_-]?key|credentials?|account[_-]?key|sas[_-]?token|shared[_-]?access[_-]?key)["']?\s*[:=]\s*(?:"[^"\n]{12,}"|'[^'\n]{12,}'|["']?[^\s"']{12,})/i,
 		],
 	},
 	{
 		name: "cookie-header",
 		patterns: [
-			/(?:^|[^a-z])(?:set-)?cookie\s*:\s*[A-Za-z0-9_.~%-]+=[^\s;]{16,}/i,
+			/(?:^|[^a-z])(?:set-)?cookie\s*:\s*(?!(?:path|domain|expires|max-age|samesite|secure|httponly|priority|version|comment)\s*=)[A-Za-z0-9_.~%-]+=[^\s;]{16,}/i,
 		],
 	},
+	{ name: "docker-auth", patterns: [/"auth"\s*:\s*"[A-Za-z0-9+/=]{16,}"/] },
 ];
 
 const ENV_VALUE_RULE = "env-value";
