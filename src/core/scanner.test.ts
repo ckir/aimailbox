@@ -580,6 +580,8 @@ describe("scanOutgoing secrets", () => {
 		for (const text of [
 			`${"AGE-SECRET-" + "KEY-"}1${upperDigits(58)}`,
 			`${"hv" + "s."}${randomAlnum(40)}`,
+			`${"hv" + "b."}${randomAlnum(40)}`,
+			`${"hv" + "r."}${randomAlnum(40)}`,
 		]) {
 			expect<unknown>(scanOutgoing(`I pasted ${text} here`, EMPTY)).toEqual({
 				outcome: "secret",
@@ -601,6 +603,14 @@ describe("scanOutgoing secrets", () => {
 			`docker login -u user -p ${randomAlnum(20)} registry.example.com`,
 			`helm registry login ghcr.io --password ${randomAlnum(16)}`,
 			`podman login -p ${randomAlnum(12)} reg`,
+			`docker login -u admin -p${randomAlnum(16)} registry.example.com`,
+			`docker login -u admin -p"${randomAlnum(16)}" registry.example.com`,
+			`docker login \\\n  -u deployer \\\n  -p ${randomAlnum(16)} registry.example.com`,
+			`docker login \\\r\n  -u deployer \\\r\n  -p ${randomAlnum(16)} reg`,
+			`nerdctl login -u bob -p ${randomAlnum(16)} reg.io`,
+			`buildah login -u bob -p ${randomAlnum(16)} reg.io`,
+			`crane auth login reg.io -u bob -p ${randomAlnum(16)}`,
+			`oras login reg.io -u bob --password ${randomAlnum(16)}`,
 		]) {
 			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
 				outcome: "secret",
@@ -612,11 +622,14 @@ describe("scanOutgoing secrets", () => {
 			"docker login registry.example.com",
 			"docker login -u user",
 			"ssh -p 2222 host",
+			"docker login --password-stdin registry.example.com < pw.txt",
+			"docker login -u user -p x registry.example.com",
 		]) {
 			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
 		}
 		const started = performance.now();
 		scanOutgoing(`docker login ${"a ".repeat(100000)}`, EMPTY);
+		scanOutgoing(`docker login ${"\\\n ".repeat(100000)}`, EMPTY);
 		expect(performance.now() - started).toBeLessThan(1000);
 	});
 

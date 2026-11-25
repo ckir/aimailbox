@@ -67,7 +67,7 @@ const PATTERN_RULES: readonly PatternRule[] = [
 			/\bshp(?:at|ca|pa|ss)_[A-Za-z0-9]{20,}/,
 			/\bya29\.[A-Za-z0-9_-]{30,}/,
 			/\bAGE-SECRET-KEY-[A-Z0-9]{40,}/,
-			/\bhvs\.[A-Za-z0-9_-]{20,}/,
+			/\bhv[sbr]\.[A-Za-z0-9_-]{20,}/,
 		],
 	},
 	{
@@ -106,7 +106,7 @@ const PATTERN_RULES: readonly PatternRule[] = [
 			/\bsshpass\s+-p\s*\S{6,}/,
 			/(?:^|\s)--(?:password|passwd|pass|token|secret|api-key|apikey|access-key|secret-key)(?:=|\s+)(?!-)\S{8,}/i,
 			/\bmysql\b[^\n]{0,100}?\s-p\S{8,}/,
-			/\b(?:docker|podman|helm|skopeo)\s+(?:registry\s+)?login\b[^\n]{0,100}?\s(?:-p|--password)[ =]\S{6,}/,
+			/\b(?:docker|podman|helm|skopeo|nerdctl|buildah|oras|crane|regctl)\s+(?:(?:registry|auth)\s+)?login\b(?:[^\n]|\\\r?\n){0,100}?\s(?:--password[ =]|-p[ =]?)["']?\S{6,}/,
 			/\baws\s+configure\s+set\s+\S*(?:secret|token|key)\S*\s+\S{12,}/i,
 		],
 	},
