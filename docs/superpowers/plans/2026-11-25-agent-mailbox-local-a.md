@@ -660,6 +660,34 @@ git commit -m "Give a vote whose version is invalid as written no table row (12.
 
 After Task 7: run `just check` (it includes the toolchain suite). Then, before the plan is declared complete, the standing disciplines of this repository apply: a convergent AGY-CAPSTONE review of the committed range, then AGY-TEST-AUDIT, each with the verify-before-fold rule, and the owner scopes any gaps. Do not push or open a pull request without asking the owner.
 
+## Rulings made during execution (2026-11-25)
+
+The plan text above is what was reviewed and merged. Executing it with a reviewer after every task found places where the plan text was wrong against the spec, which is the binding authority. Each ruling below overrides the plan text it names and is built and tested. They are listed so that a reader of this plan is not misled and so that plan 2b starts from what exists.
+
+Pre-flight:
+
+- Task 5's envelope cut allowance is computed from the notice (`LIMITS.envelopeBytes - utf8Length(notice) - 1`), not the literal 40.
+- Task 3: findings with the same start and length of different kinds are ordered by kind name, ascending.
+
+Task 3 (scanner), after a review that reproduced every case:
+
+- R1 (8.1): the `secret-assignment` pattern has no leading `\b` and allows a closing quote before the separator, so `DB_PASSWORD=...`, `AWS_SECRET_ACCESS_KEY=...` and `{"password": "..."}` are secrets.
+- R2: the boundary of a user name, host name, branch or package name is "not `[A-Za-z0-9_]`" on both sides, so `alice.`, `box7.local` and `alice-dev` are found.
+- R3 (revised by R19): a home or work directory hit must end at a path boundary (end of text, or not `[A-Za-z0-9_-]` and not `.` followed by one), so `/home/u` is not a hit inside `/home/user/x`.
+- R4: when a dropped overlapping hit extends past the kept finding, the kept finding loses its fix.
+- R5: the private-key pattern also matches `PRIVATE KEY BLOCK`.
+- R6: trailing slashes of directory entries are removed before matching (`/` stays `/`, a slash-only entry becomes `/`).
+
+Task 4 (policy): R7, a call directory that is not an absolute normalised path resolves to deny; R8, with at least one remote rule and any unparsable call remote the mode is capped at confirm-each and unattended post-read sends are off; R9, `DEFAULT_POLICY` is deep-frozen.
+
+Task 5 (render): R10, `summaryLineBytes` is 1024, because the worst validated prefix is 427 bytes and a 120-code-point summary of 4-byte characters is 480; R11, the unknown-format line reads `1 entry needs a newer client` for one, and omits the colon when no numbers are listed.
+
+Task 6 (detect): R12, for npm, cargo and go any recorded version that fails `canOrder` makes the answer unknown (`1.x`, `latest`, `1.2` are not installed versions); R13, an explicit version skips parsing, recorded versions are de-duplicated before resolving, and Cargo multi-line strings are skipped everywhere. Both functions throw for a non-canonical address, as `ecosystemOf` does.
+
+Final whole-branch review: R14, a private remote is matched as host, optional `:port`, then `/`, `:` or `:/`, then the path; R15, a rendered line shows the union of the entry's tags and the client's `computeTags` over the summary and failure signature (7.4); R16, every secret rule and the environment-value check run over the raw text, the stripped text and its NFKC form; R17, a `package-lock.json` entry with a `name` is attributed to that name; R18, a go.mod `replace` of the box makes its version unknown; R19, a directory entry of `/` is ignored and a directory hit needs a leading boundary; R20, `canonicalRemote` is exported from `policy.ts`, `renderLookup` refuses a non-canonical address with `bad-address`, and an unparsable remote beside a matching allow remote gives confirm-each.
+
+Contracts that plan 2b must meet, found by the reviews and not fixable here: rule directories and the call directory must both be resolved (real path, the file system's case rule) before `resolvePolicy`, because the policy compares them as given; entries the client builds from its local store must be cleaned before they are rendered; the client passes only validated canonical addresses and a `nextGroupCommand` built from trusted parts; the scanner needs `privateRemotes` in `host/path` form (use `canonicalRemote`) and must not be given `/` as a work directory.
+
 ## Self-review (run 2026-11-25)
 
 - **Spec coverage.** 7.1 default-ignorable: Task 1. 7.2, 7.3 envelope and rendered summaries: Task 5. 7.4 tags: Task 2. 8.1 scanner: Task 3. 8.4 policy file, scoped rules, veto, retraction exception: Task 4. 12.4 rule 4 installed version: Task 6. 12.3 invalid version has no row: Task 7. Not in 2a by design, and where they go: the draft lock (8.2), the local store (9.6), the veto file reading, the read record, lookup and send over local notes, the printed allow command, the command surface (2b); setup, uninstall, the always-on rule, dogfood (2c); the read-state rules of 8.3, the confirmation (8.5), the gate (9.2): plan 5.
