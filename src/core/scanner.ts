@@ -69,14 +69,17 @@ const PATTERN_RULES: readonly PatternRule[] = [
 	{
 		name: "bearer-header",
 		patterns: [
-			/(?:authorization|proxy-authorization)\s*:\s*(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{16,}/i,
+			/(?:authorization|proxy-authorization)\s*:\s*(?:bearer|basic|token|digest)\s+[A-Za-z0-9._~+/=-]{16,}/i,
 		],
 	},
-	{ name: "url-credentials", patterns: [/:\/\/[^/\s:@]+:[^/\s@]+@/] },
+	{
+		name: "url-credentials",
+		patterns: [/:\/\/[^/\s:@]+:[^/\s@]+@/, /:\/\/[A-Za-z0-9._~%-]{20,}@/],
+	},
 	{
 		name: "secret-assignment",
 		patterns: [
-			/(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|secret[_-]?access[_-]?key)["']?\s*[:=]\s*["']?[^\s"']{12,}/i,
+			/(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|secret[_-]?access[_-]?key)["']?\s*[:=]\s*(?:"[^"\n]{12,}"|'[^'\n]{12,}'|["']?[^\s"']{12,})/i,
 		],
 	},
 ];
@@ -319,7 +322,7 @@ function nameHits(
 	}
 }
 
-const HOST_CHAR = /[a-z0-9._-]/;
+const HOST_CHAR = /[a-z0-9.-]/;
 
 function escapeRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

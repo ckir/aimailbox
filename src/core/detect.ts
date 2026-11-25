@@ -126,6 +126,20 @@ const GO_BLOCK_LINE = /^(\S+)\s+(\S+)$/;
 const GO_REPLACE_LINE = /^replace\s+(\S+)(?:\s+\S+)?\s*=>/;
 const GO_REPLACE_BLOCK_LINE = /^(\S+)(?:\s+\S+)?\s*=>/;
 
+// Go allows a module path in double quotes or back-quotes: one matching pair
+// is stripped, a mismatched or lone quote is left (and then fails canonicalise).
+function goUnquote(token: string): string {
+	const first = token.charAt(0);
+	if (
+		token.length >= 2 &&
+		(first === '"' || first === "`") &&
+		token.endsWith(first)
+	) {
+		return token.slice(1, -1);
+	}
+	return token;
+}
+
 function goComment(line: string): string {
 	const comment = line.indexOf("//");
 	return (comment < 0 ? line : line.slice(0, comment)).trim();
@@ -140,12 +154,12 @@ function goVersions(address: string, text: string): string[] {
 	let replaced = false;
 	const replace = (path: string | undefined) => {
 		if (path === undefined) return;
-		const canonical = canonicalise(`go/${path}`);
+		const canonical = canonicalise(`go/${goUnquote(path)}`);
 		if (canonical.ok && canonical.value === address) replaced = true;
 	};
 	const add = (path: string | undefined, version: string | undefined) => {
 		if (path === undefined || version === undefined) return;
-		const canonical = canonicalise(`go/${path}`);
+		const canonical = canonicalise(`go/${goUnquote(path)}`);
 		if (canonical.ok && canonical.value === address) found.push(version);
 	};
 	let block: string | undefined;

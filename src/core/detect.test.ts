@@ -938,3 +938,57 @@ test("go: a replace of the box in one go.mod gives no versions, another file sti
 	];
 	expect(recordedVersions("go/github.com/a/b", files)).toEqual(["v1.6.0"]);
 });
+
+// ---- go quoted paths (12.4)
+test("go: a quoted replace of the module makes the version unknown", () => {
+	for (const replace of [
+		'replace "github.com/a/b" => ../b',
+		"replace `github.com/a/b` => ../b",
+		'replace "github.com/a/b" v1.5.0 => ../b',
+	]) {
+		expect(
+			recordedVersions("go/github.com/a/b", [goMod(GO_REQUIRE, replace)]),
+		).toEqual([]);
+	}
+	for (const block of [
+		["replace (", '\t"github.com/a/b" => ../b', ")"],
+		["replace (", "\t`github.com/a/b` v1.5.0 => ../b", ")"],
+	]) {
+		expect(
+			recordedVersions("go/github.com/a/b", [goMod(GO_REQUIRE, ...block)]),
+		).toEqual([]);
+	}
+});
+test("go: a quoted require path is read as a require", () => {
+	for (const lines of [
+		['require "github.com/a/b" v1.5.0'],
+		["require `github.com/a/b` v1.5.0"],
+		["require (", '\t"github.com/a/b" v1.5.0', ")"],
+		["require (", "\t`github.com/a/b` v1.5.0", ")"],
+	]) {
+		expect(recordedVersions("go/github.com/a/b", [goMod(...lines)])).toEqual([
+			"v1.5.0",
+		]);
+	}
+});
+test("go: a quoted path of another module changes nothing, a mismatched quote is ignored", () => {
+	expect(
+		recordedVersions("go/github.com/a/b", [
+			goMod(GO_REQUIRE, 'replace "github.com/a/bc" => ../bc'),
+		]),
+	).toEqual(["v1.5.0"]);
+	for (const lines of [
+		['require "github.com/a/b v1.5.0'],
+		['require "github.com/a/b` v1.5.0'],
+		['require github.com/a/b" v1.5.0'],
+	]) {
+		expect(recordedVersions("go/github.com/a/b", [goMod(...lines)])).toEqual(
+			[],
+		);
+	}
+	expect(
+		recordedVersions("go/github.com/a/b", [
+			goMod(GO_REQUIRE, 'replace "github.com/a/b => ../b'),
+		]),
+	).toEqual(["v1.5.0"]);
+});

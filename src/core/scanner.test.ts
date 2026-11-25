@@ -125,6 +125,64 @@ describe("scanOutgoing secrets", () => {
 		}
 	});
 
+	test("bearer-header covers the Token and Digest schemes (R21)", () => {
+		for (const text of [
+			`Authorization: Token ${randomAlnum(30)}`,
+			`Authorization: Digest ${randomAlnum(30)}`,
+			`Proxy-Authorization: token ${randomAlnum(30)}`,
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["bearer-header"],
+			});
+		}
+		for (const text of [
+			"Authorization: Token abc",
+			"the Token scheme is described in RFC 6750",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("url-credentials covers a token used as the username of a URL (R22)", () => {
+		expect<unknown>(
+			scanOutgoing(
+				`git clone https://${randomAlnum(30)}@gitlab.com/org/repo`,
+				EMPTY,
+			),
+		).toEqual({ outcome: "secret", rules: ["url-credentials"] });
+		expect<unknown>(
+			scanOutgoing(`see https://${randomAlnum(20)}@host.test/x`, EMPTY),
+		).toEqual({ outcome: "secret", rules: ["url-credentials"] });
+		for (const text of [
+			"git clone https://git@github.com/org/repo",
+			"ssh://git@host/path",
+			`see https://${randomAlnum(19)}@host.test/x`,
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("secret-assignment accepts a quoted value that contains spaces (R23)", () => {
+		for (const text of [
+			'password: "correct horse battery staple"',
+			"secret = 'my long passphrase here'",
+			'{"password": "two words here ok"}',
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["secret-assignment"],
+			});
+		}
+		for (const text of [
+			'password: "short one"',
+			"the password field is required",
+			'password: "x"',
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
 	test("private-key-block also matches the PGP block header", () => {
 		const header = `${"-----BEGIN " + "PGP PRIV"}${"ATE KEY BL" + "OCK-----"}`;
 		expect<unknown>(
@@ -459,6 +517,27 @@ describe("scanOutgoing context", () => {
 			],
 		});
 		expect<unknown>(scanOutgoing("cloned github.com/me/public", ctx)).toEqual({
+			outcome: "clean",
+		});
+	});
+
+	test("a private remote is found after an underscore, as in markdown emphasis (R24)", () => {
+		const ctx = context({ privateRemotes: ["github.com/me/private"] });
+		for (const text of [
+			"_github.com/me/private_",
+			"see_github.com/me/private",
+		]) {
+			const result = scanOutgoing(text, ctx);
+			if (result.outcome !== "context") throw new Error(`not context: ${text}`);
+			expect(result.findings).toHaveLength(1);
+			expect(result.findings[0]?.kind).toBe("private-remote");
+			const start = text.indexOf("github.com");
+			expect<unknown>(result.findings[0]?.span).toEqual({
+				start,
+				end: start + "github.com/me/private".length,
+			});
+		}
+		expect<unknown>(scanOutgoing("xgithub.com/me/private", ctx)).toEqual({
 			outcome: "clean",
 		});
 	});
