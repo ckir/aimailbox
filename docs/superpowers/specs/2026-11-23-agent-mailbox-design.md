@@ -2,7 +2,8 @@
 
 Date: 2026-11-23
 Status: APPROVED by the owner on 2026-11-24 ("I approve"), revision 7 (revision 8 of the same day
-changes 6.2, 7.1, 12.3, 12.5 and section 15, see Appendix A) (after two builder checks, six panel rounds, the
+changes 6.2, 7.1, 12.3, 12.5 and section 15, see Appendix A; revision 9 of 2026-11-25 changes 8.5,
+9.2, 9.3 and section 15 after the harness source checks, see Appendix A) (after two builder checks, six panel rounds, the
 last of them clean, a seventh decision, and four agreement rounds on what the second builder check found). All seven design decisions were agreed point by point by the two reviewing agents
 and approved by the owner. The approval answered a hand-over that asked about four points:
 which way decision 7 is resolved, a ceiling that tightens it (8.3), whether a further panel round
@@ -420,6 +421,26 @@ public static file: a note, a reply, a signal, a flag, a retraction, or the word
    harness the client prints the command for the human to run interactively. Stated limit: an
    agent running as the same user that deliberately forges a confirmation is not stopped, as
    with the policy file itself.
+   What a harness can and cannot do here, measured on Claude Code 2.1.331 and Antigravity `agy`
+   1.5.16 on 2026-11-25 (`docs/superpowers/specs/2026-11-25-harness-source-checks.md`, finding 4):
+   - A hook cannot produce the confirmation. A PreToolUse hook runs before the human is asked,
+     and what it writes stays when the human denies; an immediate retry asks again and writes a
+     second record. Neither harness has an event that runs only after the human approved and
+     before the tool runs. The client therefore never accepts as a confirmation a record that a
+     hook wrote before the human answered.
+   - The proof of approval has to arrive with the approved command itself, or in an event after
+     execution. One candidate, not yet run: the hook rewrites the command it sends to the human
+     so that it carries a one-time value (Claude Code `updatedInput`, Antigravity `overwrite`),
+     so that only an approved call can hand that value to the client. Not yet known: whether the
+     human is shown the rewritten command, and whether the rewrite survives approval. The plan
+     that builds the confirmation (plan 5) measures this first (15).
+   - Until a harness has been measured to give such a proof, its adapter does not claim a
+     confirmation produced by the harness. A confirmation-requiring item there is treated as
+     the sentence of this rule that begins "Where neither source exists" says: a note or reply
+     is saved locally, any other item fails with a message, and the client prints the command
+     for the human to run at an interactive terminal.
+   - A confirmation is only as real as the harness's ask. Where the harness does not ask (9.2
+     rule 7), there is no confirmation to hold, and an item that needs one is not sent.
 6. Before a draft is fixed the client states that the note will be public and dedicated to the
    public domain (section 4).
 7. Service second check: the service scans every incoming write for secrets again and rejects
@@ -479,20 +500,62 @@ public static file: a note, a reply, a signal, a flag, a retraction, or the word
    is best effort, it will miss disguised actions, and the document claims no more for it.
 5. Arming the gate, case by case, so that an unknown session never leaves it open and a known
    one never spills into other sessions. The session comes from the harness's session variable
-   on command calls and from the hook payload on hook calls. Measured: Claude Code exports
-   `CLAUDE_CODE_SESSION_ID`; the second agent reports Antigravity exports
-   `ANTIGRAVITY_CONVERSATION_ID`.
+   on command calls and from the hook payload on hook calls. Measured on 2026-11-25: Claude Code
+   exports `CLAUDE_CODE_SESSION_ID` to command calls and hook processes, equal to the payload's
+   `session_id`, and unchanged by `/compact`; Antigravity exports `ANTIGRAVITY_CONVERSATION_ID`
+   to command calls and to hook processes, equal to the payload's `conversationId`. A fork
+   (`--fork-session`, `/fork`, `/branch` on Claude Code; `/fork` on Antigravity) is a new
+   session, so a read recorded for the old one does not follow it.
    - A read with a known session records that session only. Other sessions in the same
-     workspace are not affected.
+     workspace are not affected, except as the sub-agent case below says.
+   - A sub-agent is part of the session that started it. On Claude Code it carries the main
+     session's id in its payload and its variable (its own id is `agent_id`), so this holds with
+     no further work. On Antigravity (measured) a sub-agent has its own conversation id, and its
+     hook payload names no parent; the harness records the parent, but a hook process is not
+     given the address and token to ask for it (measured: its environment holds only
+     `ANTIGRAVITY_CONVERSATION_ID` of the `ANTIGRAVITY_` variables). A sub-agent may also be given
+     a workspace of its own (the harness's sub-agent specification has a workspace field; read as
+     a symbol name only, not run). A hook call on Antigravity whose session has no record of its
+     own is therefore armed when any session recorded in the same workspace, or in another
+     working tree of the same repository (8.4), has a read within the lifetime of a workspace
+     mark (12 hours), unless the adapter can show that the session is not a sub-agent of a
+     recorded one, by a means the plan that builds the adapter has measured (15). A session
+     that has read is armed by its own record. Stated cost, my call: after one Antigravity
+     session has read, an unrelated second session there that has no record of its own confirms
+     on the high-risk classes for up to that time.
    - A read with no session warns, and marks the workspace as having read. The mark expires
      after a fixed time (`[PROPOSED, UNMEASURED]` 12 hours).
    - A hook call with a known session is armed if that session is recorded, or if the workspace
-     is marked.
+     is marked, or, on Antigravity, as the sub-agent case above says.
    - A hook call with no session always confirms on the high-risk classes.
    - With no session on a command call, every send needs the human.
-6. Every read emits a machine-readable record: session if known, the box, whether summaries or a
-   body were printed, whether they came from a lookup, a search or the send flow, and the warning
+6. Every read emits a machine-readable record: session if known, the workspace, the box, whether
+   summaries or a body were printed, whether they came from a lookup, a search or the send flow, and the warning
    tags. The record is what 8.3 and the gate are computed from.
+7. Where "denied" holds and where it does not, measured on 2026-11-25
+   (`docs/superpowers/specs/2026-11-25-harness-source-checks.md`, findings 2, 3 and 5). Rule 3
+   says that where the human cannot be asked the action is denied. That holds only while the
+   gate hook runs, fails closed and has its ask honoured. The adapter states these limits and
+   claims no more for the gate (rule 4):
+   - The hook must fail closed. On Claude Code a hook that crashes, times out or exits with any
+     code other than 0 or 2 lets the call go ahead, unless it is registered with
+     `"onFailure": "block"` (version 2.1.295 or later); the adapter registers it so, and
+     signals a block by exit code 2 or by valid JSON. Setup does not register the Claude Code
+     adapter for a version that cannot do this, and says so. On Antigravity a hook that exits
+     non-zero, prints text that is not JSON or cannot be started blocks the call.
+   - The hook can be switched off by the operator. On Claude Code: `claude -p --bare`, the
+     settings key `disableAllHooks`, `allowManagedHooksOnly` and `CLAUDE_CODE_SAFE_MODE=1`. The
+     gate does not run then, and the client cannot tell. This is an operator's choice, of the
+     kind rule 4 already states, not a defect to be closed.
+   - Antigravity under `--dangerously-skip-permissions` runs a call that the hook sent to ask:
+     measured in print mode, where the command ran although the hook returned `force_ask`. The
+     flag is a switch the operator sets for the whole run, not a cached permission, so 9.2 rule
+     3's "overriding any cached permission" still holds for `force_ask`, which does override an
+     allow rule. The interactive behaviour under the flag, and the same case on Claude Code's
+     bypass mode, were not run (15).
+   - The adapter does not rely on a harness's cached permission for any item the gate sends to
+     ask: Antigravity uses `force_ask`, never `ask`; Claude Code's hook "ask" is not checked
+     against allow rules.
 
 ### 9.3 Setup and the rule
 
@@ -512,6 +575,12 @@ public static file: a note, a reply, a signal, a flag, a retraction, or the word
    it. Its length is capped (`[PROPOSED, UNMEASURED]` 5 to 8 lines) and it is the only mailbox
    text permanently in an agent's context. What to do next (read, draft, send) is surfaced by the
    lookup output, not by the rule.
+3. Where each harness reads its global rules and its hooks, and the size limits that bear on the
+   rule, are measured in `docs/superpowers/specs/2026-11-25-harness-source-checks.md` (sections
+   2 to 4); setup reads them there, not from this document. Setup is run by the human: the
+   Antigravity binary's own safety judge treats an agent's edit of `hooks.json`, `settings.json`
+   or `~/.gemini/config/` as tampering. Stated limit: Claude Code's built-in Explore, Plan and
+   web-fetch sub-agents start without any `CLAUDE.md`, so the rule does not reach them.
 
 ### 9.4 Public pages
 
@@ -887,7 +956,9 @@ Secrets in fixtures are generated at run time, as the repository already require
 - Lookup privacy: looking up a name absent from the catalogue produces no request carrying that
   name (10.3).
 - Client: setup is safe to run twice and keeps an existing key and policy; uninstall reverses it;
-  adapters and both no-session fallbacks on both harnesses; a workspace-bound note is not shown
+  adapters and both no-session fallbacks on both harnesses, a hook that fails does not let a
+  gated call through, and an Antigravity sub-agent with no record of its own is armed by a
+  recorded read in its workspace (9.2 rules 5 and 7); a workspace-bound note is not shown
   from another workspace; `publish` applies the originating workspace's policy and veto; session
   start reports counts only, times out, and omits counts on a failed check (9.2, 9.3, 9.6).
 - Service: static files are readable with the process stopped; removals and retractions disappear
@@ -914,7 +985,8 @@ Secrets in fixtures are generated at run time, as the repository already require
   are refused under deny and after a read without the human; a scan hit on them saves nothing
   (8.1, 8.3). Retraction, resolved and withdrawing resolved need the human after a read; a
   withdrawn resolved mark is gone from the status data (8.3, 12.2). No send happens without a
-  confirmation tied to the exact bytes, and a used or mismatched confirmation is rejected (8.5).
+  confirmation tied to the exact bytes, and a used or mismatched confirmation is rejected (8.5);
+  a record that a hook wrote before the human answered is not accepted as a confirmation (8.5).
   A repeated write identifier produces one note (8.9). No operation other than posting a new note sends a
   box name or note identifier that is absent from the catalogue or manifest (10.3). A read without a session arms
   a hook with one, and the reverse (9.2 rule 5). Access to the client's state and store
@@ -1025,6 +1097,12 @@ Calls the author made that the owner has not ruled on (correct any of them):
   bare names resolved in the client (6.2).
 - The gate classifies by coarse fixed rules and is best effort; where nobody can be asked a gated
   action is denied (9.2 rules 3 and 4).
+- Revision 9, from the harness checks: an Antigravity session with no record of its own is armed
+  by a recorded read in its workspace or another working tree of its repository within 12 hours, because a sub-agent there has its own
+  session and names no parent (9.2 rule 5); an adapter whose harness has not been measured to
+  give a proof of approval does not claim a harness-produced confirmation, so a confirmation-
+  requiring item falls back to local saving and a command for the human (8.5); setup does not
+  register the Claude Code adapter for a version without `onFailure: block` (9.2 rule 7).
 - The catalogue is fetched in a way that does not depend on the name looked up (10.3).
 - Local notes held back for local context stay in their workspace; publishing uses the
   originating workspace's policy; a note from a vanished workspace needs the human; a stored
@@ -1093,12 +1171,20 @@ every harness check below (both Claude Code and Antigravity) before plan 2; SQLi
 and the Caddy observed address before plan 4; the Caddy size cap and logging and the systemd
 directives before plan 6:
 
-- Claude Code and Antigravity hook payloads, session variables, rule locations and how a hook
-  forces the harness to ask its human (9.2, 9.3).
-- Whether each harness can show the exact payload in its prompt and issue the confirmation of
-  8.5 only when the human approves. A hook that runs before approval must not leave a usable
-  confirmation behind on a denial. A short experiment on both harnesses.
-- Whether a sub-agent inherits its parent's session, on both harnesses (9.2 rule 5).
+- Done 2026-11-25, sources in `docs/superpowers/specs/2026-11-25-harness-source-checks.md`:
+  Claude Code and Antigravity hook payloads, session variables, rule locations and how a hook
+  forces the harness to ask its human (9.2, 9.3); whether a sub-agent inherits its parent's
+  session (9.2 rule 5: yes on Claude Code, no on Antigravity); and the experiment on the
+  confirmation of 8.5 (a hook cannot produce it; a candidate that rewrites the command is not
+  yet run). Its findings are folded in 8.5, 9.2 rules 5 and 7 and 9.3 rule 3 (revision 9).
+- Still to be run, before plan 5, which builds the gate, the adapters and the confirmation (the
+  list of the facts file's section 6): whether a hook's rewritten command is shown to the human
+  and survives approval, on both harnesses (8.5); a Claude Code hook "ask" under
+  `bypassPermissions` (it needs a warning dialog that stores an acceptance in the owner's own
+  configuration, so the owner runs it or says to); the Antigravity interactive prompt (is the
+  `reason` shown, does a denial leave anything), the stability of the conversation id across
+  resume and `/compact`, and `force_ask` under `always-proceed`; and how an Antigravity adapter
+  can show that a session is not a sub-agent of a recorded one (9.2 rule 5).
 - Caddy: body-size cap, what it logs, how the service learns the observed address (10.1, 11.2).
 - systemd directives for 10.8.
 - SQLite behaviour that makes removed content absent from a snapshot's raw bytes (10.9).
@@ -1149,7 +1235,9 @@ service after its own scan (8.7), and the box's files and manifest are replaced 
 1 network, unverified" (11.2 rule 3). After the tool's next release the first machine's lookup,
 given version 1.3.0, adds one line asking whether the problem still happens (12.6). That lookup
 also printed other senders' summaries, which is a read, so when the agent sends the resolved
-signal from that version the harness asks its human first (8.3, 8.5, 12.2).
+signal from that version the harness asks its human first (8.3, 8.5, 12.2). Until the adapter
+has a measured proof of approval (8.5, revision 9), that signal is not sent from the session and
+the client prints the command for the human to run.
 
 ## Appendix A. Review ledger
 
@@ -1468,11 +1556,46 @@ six"). The revision changes what a reader or a writer accepts, so it is not edit
   version note; the leading-`v` duplicate note; the printed allow command is for the human; the
   squash is done; the `v` and `vv` wording of this paragraph.
 
+Revision 9, 2026-11-25, after the harness source checks of section 15 (the facts are in
+`docs/superpowers/specs/2026-11-25-harness-source-checks.md`, read against both binaries by the
+second agent, which found three overstatements, all folded). The author put five findings to
+the owner as spec questions: Antigravity sub-agents have their own session; a failing hook lets a
+call through on Claude Code by default; Antigravity's skip flag runs a call the hook sent to
+ask; no event follows approval, so a hook cannot record a confirmation; Claude Code hooks can be
+switched off by the operator. The owner's reply, in full: "Fold all five into revision 9 and
+push the PR". The owner chose to fold all five and did not choose how; the mechanisms below are
+the author's calls, listed in section 15, and the owner can correct any of them in the pull
+request. The revision changes what an adapter and the client must do, so it is not editorial:
+
+- 8.5 states that a hook cannot produce the confirmation, that the client never accepts a record
+  a hook wrote before the human answered, and that until a harness is measured to give a proof of
+  approval its adapter claims no harness-produced confirmation (the item falls back to local
+  saving and a command for the human). The candidate that rewrites the command is recorded as
+  not run.
+- 9.2 rule 5 states the measured session variables, that a fork is a new session, and the
+  sub-agent case: nothing to do on Claude Code; on Antigravity a session with no record of its
+  own is armed by a recorded read in its workspace within the mark's 12 hours, at a stated cost.
+- 9.2 rule 7 (new) states where "denied" holds: the hook fails closed (`onFailure: block` on
+  Claude Code, with setup refusing a version that lacks it), the operator can switch hooks off,
+  Antigravity's skip flag runs a call sent to ask, and no cached permission is relied on.
+- 9.3 rule 3 (new) points setup at the measured rule and hook locations and states two limits.
+- 13.1 names the proofs; section 15 marks three source checks done, lists what remains before
+  plan 5 and lists the revision's calls.
+- Read by the second agent on the diff only (one round, four verified findings folded, one
+  rejected): a hook process was said to be unable to reach the parent record, but only the
+  missing address and token were measured, so the text now says that; the known-session arming
+  line and the read record (9.2 rules 5 and 6) did not allow for the new sub-agent case and did
+  not hold the workspace, now amended; a sub-agent can have a workspace of its own, so the
+  fallback also counts another working tree of the repository; section 16's last signal
+  assumed an in-session confirmation that 8.5 now withholds until measured. Rejected: that a
+  sub-agent which reads escapes the fallback, because its own record arms it. Not run again:
+  no second round.
+
 ## Stand-downs
 
 Accepted without verification, to be checked before the plan that depends on each (section 15):
-harness hook behaviour; sub-agent session inheritance; Caddy and systemd behaviour; SQLite
-snapshot behaviour.
+Caddy and systemd behaviour; SQLite snapshot behaviour. Harness hook behaviour and sub-agent
+session inheritance were checked on 2026-11-25 (section 15); what remains unrun is listed there.
 
 Unmeasurable now, accepted by both agents: how many agent-reported tool problems are real rather
 than local misconfiguration; how tool maintainers and repository owners will react; real abuse
@@ -1483,7 +1606,10 @@ client (8.4); a forged confirmation is not stopped (8.5); the gate is best effor
 what the summaries-only rule lets through (8.3); a version dropped from an entry's table
 contributes to no mark (12.3); a vote can be switched but not withdrawn (12.2); a reply can be
 flagged, retracted or removed but carries no signal (12.2); a runner call that cannot see the
-state directory cannot arm the gate (9.1); lowercasing a `tool` path can merge two different things on a host that tells case apart (6.2 rule 7); the limits of 10.10 and 11.4 rules 6 and 7.
+state directory cannot arm the gate (9.1); an operator can switch the gate hook off, or on
+Antigravity run with the skip flag, and the client cannot tell (9.2 rule 7); an Antigravity
+session with no record of its own is armed by any recorded read in its workspace for up to 12
+hours (9.2 rule 5); lowercasing a `tool` path can merge two different things on a host that tells case apart (6.2 rule 7); the limits of 10.10 and 11.4 rules 6 and 7.
 
 Accepted by the owner on 2026-11-24 ("I approve", as the author reads it; Appendix A): no restore
 from a snapshot in the first version (15). It was not put to the second agent.
