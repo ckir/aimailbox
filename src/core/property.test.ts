@@ -139,7 +139,7 @@ const KEPT = [
 	"_",
 	"'",
 ];
-// Removed by stripForbidden today: Cc, Cf, Cs, Co, Cn, Zl, Zp.
+// Removed by stripForbidden because of their category: Cc, Cf, Cs, Co, Cn, Zl, Zp.
 const FORBIDDEN = [
 	"\u0000",
 	"\u0007",
@@ -184,6 +184,7 @@ const DEFAULT_IGNORABLE = [
 const UNITS = [
 	...KEPT.map((s) => ({ s, forbidden: false })),
 	...FORBIDDEN.map((s) => ({ s, forbidden: true })),
+	...DEFAULT_IGNORABLE.map((s) => ({ s, forbidden: true })),
 ];
 // Well-formed strings only: no lone surrogate.
 const WELL_FORMED = [...KEPT, ...FORBIDDEN.filter((s) => s !== "\ud800")];
@@ -230,10 +231,7 @@ describe("text", () => {
 		}
 	});
 
-	// Spec 7.1 (revision 8) forbids every Default_Ignorable_Code_Point; the
-	// code change is planned for the start of plan 2, so this fails today.
-	// test.failing turns red the day the code is fixed: then make it test().
-	test.failing("stripForbidden removes every Default_Ignorable_Code_Point (7.1 revision 8, built in plan 2)", () => {
+	test("stripForbidden removes every Default_Ignorable_Code_Point (7.1 revision 8, built in plan 2)", () => {
 		for (const unit of DEFAULT_IGNORABLE) {
 			expect(stripForbidden(`a${unit}b`)).toBe("ab");
 		}

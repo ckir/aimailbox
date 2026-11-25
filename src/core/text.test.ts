@@ -24,6 +24,38 @@ test("each forbidden category is removed, newline and tab are kept", () => {
 	expect(stripForbidden("a\tb\nc")).toBe("a\tb\nc");
 	expect(stripForbidden("a\r\nb")).toBe("a\nb");
 });
+test("each default-ignorable code point that the categories leave in is removed", () => {
+	const units = [
+		"\u034f",
+		"\u115f",
+		"\u1160",
+		"\u17b4",
+		"\u180b",
+		"\u3164",
+		"\ufe00",
+		"\ufe0e",
+		"\ufe0f",
+		"\uffa0",
+		"\u{e0100}",
+		"\u{e01ef}",
+	];
+	for (const unit of units) {
+		expect(stripForbidden(`a${unit}b`)).toBe("ab");
+		expect(isConforming(`a${unit}b`)).toBe(false);
+	}
+});
+test("the emoji presentation selectors go, the emoji stays", () => {
+	expect(stripForbidden("\u2764\ufe0f")).toBe("\u2764");
+	expect(stripForbidden("\u{1f600}")).toBe("\u{1f600}");
+});
+test("a visible look-alike filler-free word is untouched", () => {
+	expect(stripForbidden("caf\u00e9 \u4e2d\u6587 ok")).toBe(
+		"caf\u00e9 \u4e2d\u6587 ok",
+	);
+});
+test("a Hangul filler splits nothing after removal", () => {
+	expect(stripForbidden("ab\u3164cd")).toBe("abcd");
+});
 test("a lone carriage return becomes a line feed before anything is removed", () => {
 	expect(stripForbidden("a\u000db")).toBe("a\u000ab");
 	expect(stripForbidden("a\u000d\u000d\u000ab")).toBe("a\u000a\u000ab");

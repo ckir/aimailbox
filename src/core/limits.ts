@@ -26,4 +26,11 @@ export const LIMITS = {
 	unknownFormatListed: 10,
 	queryWords: 8,
 	notReproducedThreshold: 3, // spec 12.4
+	scanEnvSecretNamedMinChars: 8, // [PROPOSED, UNMEASURED] shortest value of a secret-named variable the scanner looks for
+	scanEnvEntropyMinChars: 20, // [PROPOSED, UNMEASURED] shortest value the scanner judges by entropy alone
+	scanEntropyBitsPerChar: 3.5, // [PROPOSED, UNMEASURED] Shannon entropy per character at or above which a value counts as random
+	scanContextNameMinChars: 3, // [PROPOSED, UNMEASURED] shortest user, host, branch or package name the scanner looks for
+	envelopeBytes: 16384, // [PROPOSED, UNMEASURED] hard cap (7.3) on the text inside one untrusted block
+	lockFileBytes: 8388608, // [PROPOSED, UNMEASURED] largest lock or module file text the installed-version detection reads (12.4 rule 4); a larger file is not understood
+	summaryLineBytes: 1024, // [PROPOSED, UNMEASURED] strict cap (12.3) on one rendered summary line; covers the worst validated prefix plus a 120-code-point summary of 4-byte characters
 } as const;

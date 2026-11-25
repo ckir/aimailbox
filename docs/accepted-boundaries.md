@@ -56,3 +56,14 @@ tests cover it.
   set (spec 7.1) follows the Unicode version of the running Bun, 17.0 on Bun 1.4.4.
   Compensation: none in plan 1. Owner: plans 4 and 5 (owner, 2026-11-25). Anchor:
   `src/core/text.ts`, `FORBIDDEN`.
+
+## Outbound scanner (`src/core/scanner.ts`, plan 2a)
+
+- **The outbound scanner is a best-effort structural heuristic.** It catches standard forms of
+  secrets: private-key blocks, known key prefixes, authorization headers, URL userinfo, keyword
+  assignments, and common CLI and webhook forms. It does not catch an unanchored high-entropy
+  value, a proprietary token with no known prefix, or a credential in a positional argument of a
+  tool it has no rule for. Compensation: the default-deny policy (spec 8.4); the human's
+  confirmation wherever the mode is not allow (spec 8.4, 8.5); the service rescans every write
+  and rejects a hit, after which the sender must rotate the secret (spec 8.7). Anchor:
+  `src/core/scanner.ts`, `scanOutgoing`. (owner, 2026-11-25)

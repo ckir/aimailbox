@@ -1,7 +1,13 @@
 import type { Ecosystem } from "./ecosystem.ts";
 import type { FormCounts, VersionRow } from "./entry.ts";
 import { LIMITS } from "./limits.ts";
-import { canOrder, compareVersions, rowKey, rowVersion } from "./version.ts";
+import {
+	canOrder,
+	compareVersions,
+	isValidVersion,
+	rowKey,
+	rowVersion,
+} from "./version.ts";
 
 export type Vote = {
 	form: "confirm" | "doesNotReproduce";
@@ -55,7 +61,8 @@ function byVersion(ecosystem: Ecosystem): (a: Tally, b: Tally) => number {
 function tallyRows(ecosystem: Ecosystem, votes: readonly Vote[]): Tally[] {
 	const tallies = new Map<string, Tally>();
 	for (const vote of votes) {
-		if (vote.version === undefined) continue;
+		// 12.3: a version that is invalid as written has no row; the vote still counts in the totals.
+		if (vote.version === undefined || !isValidVersion(vote.version)) continue;
 		const key = rowKey(ecosystem, vote.version);
 		let tally = tallies.get(key);
 		if (tally === undefined) {

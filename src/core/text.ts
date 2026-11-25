@@ -1,5 +1,9 @@
-// Forbidden: Cc (except line feed and tab), Cf, Cs, Co, Cn, Zl, Zp.
-const FORBIDDEN = /(?![\n\t])[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}]/gu;
+// Forbidden (spec 7.1): Cc (except line feed and tab), Cf, Cs, Co, Cn, Zl, Zp,
+// and every code point with the Unicode property Default_Ignorable_Code_Point
+// (the ones those categories leave in, such as the variation selectors, the
+// Hangul fillers and the combining grapheme joiner). One pattern, one pass.
+const FORBIDDEN =
+	/(?![\n\t])[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/gu;
 const encoder = new TextEncoder();
 
 export function normalizeLineEnds(text: string): string {

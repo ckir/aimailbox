@@ -660,6 +660,51 @@ git commit -m "Give a vote whose version is invalid as written no table row (12.
 
 After Task 7: run `just check` (it includes the toolchain suite). Then, before the plan is declared complete, the standing disciplines of this repository apply: a convergent AGY-CAPSTONE review of the committed range, then AGY-TEST-AUDIT, each with the verify-before-fold rule, and the owner scopes any gaps. Do not push or open a pull request without asking the owner.
 
+## Rulings made during execution (2026-11-25)
+
+The plan text above is what was reviewed and merged. Executing it with a reviewer after every task found places where the plan text was wrong against the spec, which is the binding authority. Each ruling below overrides the plan text it names and is built and tested. They are listed so that a reader of this plan is not misled and so that plan 2b starts from what exists.
+
+Pre-flight:
+
+- Task 5's envelope cut allowance is computed from the notice (`LIMITS.envelopeBytes - utf8Length(notice) - 1`), not the literal 40.
+- Task 3: findings with the same start and length of different kinds are ordered by kind name, ascending.
+
+Task 3 (scanner), after a review that reproduced every case:
+
+- R1 (8.1): the `secret-assignment` pattern has no leading `\b` and allows a closing quote before the separator, so `DB_PASSWORD=...`, `AWS_SECRET_ACCESS_KEY=...` and `{"password": "..."}` are secrets.
+- R2: the boundary of a user name, host name, branch or package name is "not `[A-Za-z0-9_]`" on both sides, so `alice.`, `box7.local` and `alice-dev` are found.
+- R3 (revised by R19): a home or work directory hit must end at a path boundary (end of text, or not `[A-Za-z0-9_-]` and not `.` followed by one), so `/home/u` is not a hit inside `/home/user/x`.
+- R4: when a dropped overlapping hit extends past the kept finding, the kept finding loses its fix.
+- R5: the private-key pattern also matches `PRIVATE KEY BLOCK`.
+- R6: trailing slashes of directory entries are removed before matching (`/` stays `/`, a slash-only entry becomes `/`).
+
+Task 4 (policy): R7, a call directory that is not an absolute normalised path resolves to deny; R8, with at least one remote rule and any unparsable call remote the mode is capped at confirm-each and unattended post-read sends are off; R9, `DEFAULT_POLICY` is deep-frozen.
+
+Task 5 (render): R10, `summaryLineBytes` is 1024, because the worst validated prefix is 427 bytes and a 120-code-point summary of 4-byte characters is 480; R11, the unknown-format line reads `1 entry needs a newer client` for one, and omits the colon when no numbers are listed.
+
+Task 6 (detect): R12, for npm, cargo and go any recorded version that fails `canOrder` makes the answer unknown (`1.x`, `latest`, `1.2` are not installed versions); R13, an explicit version skips parsing, recorded versions are de-duplicated before resolving, and Cargo multi-line strings are skipped everywhere. Both functions throw for a non-canonical address, as `ecosystemOf` does.
+
+Final whole-branch review: R14, a private remote is matched as host, optional `:port`, then `/`, `:` or `:/`, then the path; R15, a rendered line shows the union of the entry's tags and the client's `computeTags` over the summary and failure signature (7.4); R16, every secret rule and the environment-value check run over the raw text, the stripped text and its NFKC form; R17, a `package-lock.json` entry with a `name` is attributed to that name; R18, a go.mod `replace` of the box makes its version unknown; R19, a directory entry of `/` is ignored and a directory hit needs a leading boundary; R20, `canonicalRemote` is exported from `policy.ts`, `renderLookup` refuses a non-canonical address with `bad-address`, and an unparsable remote beside a matching allow remote gives confirm-each.
+
+Contracts that plan 2b must meet, found by the reviews and not fixable here: rule directories and the call directory must both be resolved (real path, the file system's case rule) before `resolvePolicy`, because the policy compares them as given; entries the client builds from its local store must be cleaned before they are rendered; the client passes only validated canonical addresses and a `nextGroupCommand` built from trusted parts; the scanner needs `privateRemotes` in `host/path` form (use `canonicalRemote`) and must not be given `/` as a work directory.
+
+Capstone rounds 1 to 7 (an adversarial peer reading the committed code; every finding measured before it was folded). The scanner is a heuristic filter, so each round found more credential forms in new families; the fresh-corpus leak rate went from 8 of 30 (round 5) to 4 of 30 (round 6) with 0 of 30 ordinary sentences wrongly refused, and the fold of R41 to R43 was reviewed by round 7 (scoped to that fold, the owner's ruling of 2026-11-25), which found three live gaps (an attached `-p<pass>` flag, a backslash-continued login, Vault batch tokens) and the driver measured four more (Vault recovery tokens, nerdctl, buildah, crane and oras logins); R44 to R46 fold them; the owner then waived any further round. The rulings, all built and tested in `scanner.ts` and `detect.ts`:
+
+- R21, R27: the `bearer-header` schemes are bearer, basic, token, digest, apikey, api-key, negotiate and ntlm after `authorization` or `proxy-authorization`.
+- R22, R26, R30: a colon-less URL userinfo of 20 or more characters of `[A-Za-z0-9._~%+=-]` is a secret, and the user part before the colon may be empty (`redis://:pass@host`).
+- R23: a quoted value of 12 or more characters, spaces allowed, after a secret keyword is a secret. This refuses ordinary quoted prose such as `password: "see the docs for the rules"` by design: a refusal saves nothing and leaks nothing.
+- R24: `_` is not a host character in the private-remote boundary.
+- R25: go.mod module paths may be quoted with double quotes or back-quotes, so a quoted `replace` is seen.
+- R28, R31, R41: the secret-assignment keywords also cover `passphrase`, `credential(s)`, `account_key`, `sas_token`, `shared_access_key` and `secret_key`; bare `auth` is deliberately not a keyword.
+- R29, R33, R34, R37: a `cookie-header` rule for `Cookie` and `Set-Cookie` lines with a 16-character value, skipping the standard attribute names, looking at every pair, with the gap bounded at 2000 characters so the scan stays linear.
+- R31: a `docker-auth` rule for `"auth": "<base64>"`; R32, R40, R42: prefixed-key patterns for SendGrid, Stripe restricted, GitLab, PyPI, HuggingFace, DigitalOcean, Shopify, Google OAuth `ya29.`, age and Vault (R44: `hvs.`, `hvb.` and `hvr.`; the legacy Vault `s.` form is left out because it collides with code identifiers).
+- R35, R36: `~` is not a path character at a directory boundary, and each directory entry is also matched in percent-encoded form (a located finding with no fix).
+- R38, R43, R45, R46: a `cli-credentials` rule for `curl -u user:pass`, `sshpass -p`, `--password`-style flags, `mysql -p<pass>`, `aws configure set` and registry logins (docker, podman, helm, skopeo, nerdctl, buildah, oras, crane, regctl; `-p pass`, attached `-p<pass>`, `--password pass`, a backslash-continued command; `--password-stdin` stays clean); R39: a `webhook-url` rule for Slack, Discord and Teams webhook URLs.
+
+- R44: Vault service, batch and recovery tokens (`hvs.`, `hvb.`, `hvr.`) are matched; the legacy `s.` form is not, because it collides with code identifiers such as `s.handlerName`. Cost if wrong: a legacy token without a keyword passes. R45: a registry-login password may be attached to the flag (`-p<pass>`, optionally quoted). Cost if wrong: an attached flag in an unlisted tool passes. R46: a login command may continue across lines with a backslash, and the same rule covers nerdctl, buildah, oras, crane and regctl. Cost if wrong: a password flag on a later line without a backslash passes; the `-p` of an unrelated command in the same note is refused only when it follows a login within 100 characters.
+
+The stated boundary of the scanner, accepted by the owner on 2026-11-25 in `docs/accepted-boundaries.md`: it is a best-effort structural heuristic that intercepts standard forms of secrets (private-key blocks, known key prefixes, authorization headers, URL userinfo, keyword assignments, the CLI and webhook forms above); it does not detect an unanchored high-entropy value, a proprietary token with no known prefix, or a credential in a positional argument of a tool it has no rule for. Outbound safety also rests on the policy default of deny, on the human's confirmation wherever the mode is not allow (8.4, 8.5), and on the service's second scan, which rejects a hit after the secret has left the machine (8.7).
+
 ## Self-review (run 2026-11-25)
 
 - **Spec coverage.** 7.1 default-ignorable: Task 1. 7.2, 7.3 envelope and rendered summaries: Task 5. 7.4 tags: Task 2. 8.1 scanner: Task 3. 8.4 policy file, scoped rules, veto, retraction exception: Task 4. 12.4 rule 4 installed version: Task 6. 12.3 invalid version has no row: Task 7. Not in 2a by design, and where they go: the draft lock (8.2), the local store (9.6), the veto file reading, the read record, lookup and send over local notes, the printed allow command, the command surface (2b); setup, uninstall, the always-on rule, dogfood (2c); the read-state rules of 8.3, the confirmation (8.5), the gate (9.2): plan 5.

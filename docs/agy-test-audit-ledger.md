@@ -7,11 +7,12 @@ not a proof.
 
 Conventions: the newest row goes at the bottom, and a `|` inside a cell is written `\|`.
 
-| Date       | Range                                                                     | Rounds | Verdict                | Evidence                                                                                                               |
-| ---------- | ------------------------------------------------------------------------- | ------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| 2026-11-23 | 1832d1e..ea937b3 (toolchain scaffold and its tests)                       | 2      | GAPS FOUND, all closed | Fold commits 8becf24, ab9abf0, ea937b3. Briefs: .clavity/seams/toolchain-scaffold-test-audit.md and -test-audit-r2.md. |
-| 2026-11-23 | ea937b3..2864a53 (CODEOWNERS, SHA pins, commit-msg hook, pinned lefthook) | 1      | GAPS FOUND, all closed | Fold commits 4ef8467, bd49af6, 2864a53. Brief: .clavity/seams/toolchain-scaffold-test-audit-r3.md.                     |
-| 2026-11-24 | 22c1d0a..65516d8 (mailbox core, plan 1: unit and property tests)          | 2      | GAPS FOUND, all closed | Fold commit 65516d8. Briefs: .clavity/seams/agent-mailbox-core-test-audit.md and -test-audit-r2.md.                    |
+| Date       | Range                                                                         | Rounds | Verdict                 | Evidence                                                                                                                                    |
+| ---------- | ----------------------------------------------------------------------------- | ------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-11-23 | 1832d1e..ea937b3 (toolchain scaffold and its tests)                           | 2      | GAPS FOUND, all closed  | Fold commits 8becf24, ab9abf0, ea937b3. Briefs: .clavity/seams/toolchain-scaffold-test-audit.md and -test-audit-r2.md.                      |
+| 2026-11-23 | ea937b3..2864a53 (CODEOWNERS, SHA pins, commit-msg hook, pinned lefthook)     | 1      | GAPS FOUND, all closed  | Fold commits 4ef8467, bd49af6, 2864a53. Brief: .clavity/seams/toolchain-scaffold-test-audit-r3.md.                                          |
+| 2026-11-24 | 22c1d0a..65516d8 (mailbox core, plan 1: unit and property tests)              | 2      | GAPS FOUND, all closed  | Fold commit 65516d8. Briefs: .clavity/seams/agent-mailbox-core-test-audit.md and -test-audit-r2.md.                                         |
+| 2026-11-25 | 77f7fb7..26fb04f (mailbox core logic, plan 2a: eight modules and their tests) | 1      | GAPS FOUND, all refuted | The peer's three gaps each failed a logic mutant; no gap verified, no test added. Brief: .clavity/seams/agent-mailbox-plan2a-test-audit.md. |
 
 ## Notes for the 2026-11-23 audit
 
@@ -70,3 +71,33 @@ Conventions: the newest row goes at the bottom, and a `|` inside a cell is writt
   `isCanonical`).
 - Not examined: the Unicode version of the Bun runtime against the folded tables; storage, HTTP and
   file-system behaviour (plans 2 to 5). The audit raises the floor; it does not prove no gap remains.
+
+## Notes for the 2026-11-25 audit of plan 2a (77f7fb7..26fb04f)
+
+- The capstone of this range ended in an owner waiver after seven rounds (see
+  `docs/agy-capstone-ledger.md`), not in a clean GREEN. The brief said so, and told the peer not to
+  ask for a test that pins a scanner behaviour with a live finding. The peer asked for none.
+- One round, three claimed gaps, all REFUTED by logic mutants in a copy of `src/core` outside the
+  repository. Gap 1 (`highestConfirmed` untested for cargo and go): disabling it for cargo, for go or
+  for npm each fails `status.test.ts` (disabling it for pypi survives because pypi has no orderable
+  version, so the function already returns nothing there). Gap 2 (`VOTE_VERSIONS` has no invalid
+  version, so deleting the validity filter in `tallyRows` goes unseen): the mutant fails two
+  `status.test.ts` tests, `a vote whose version is invalid as written makes no row, in either vote
+  order` and `an invalid-version vote still counts in the totals`. Gap 3 (cargo and go sorting and
+  row truncation only exercised under npm): reversing the version sort or switching truncation off
+  for cargo, for go or for both fails `a smaller row limit keeps unchanged rows...` and, for the sort,
+  `rows list orderable versions oldest first...`, each in `status.test.ts` itself.
+- Of the driver's four guesses the peer called guesses 3 and 4 wrong, guess 1 partly wrong and guess
+  2 right. Guess 2 (no invalid version in `VOTE_VERSIONS`) is true of the generator, but the unit
+  tests in `status.test.ts` cover it, so it is not a gap.
+- Discarded below the floor, and checked: a rendered prefix longer than `summaryLineBytes` cannot
+  occur (`versionChars` is 64, the line cap is 1024); an empty segment in a rule directory cannot
+  occur (`readDirectory` rejects it, `policy.ts`).
+- The peer's open question 3 suggests a committed corpus (secrets that must be refused, ordinary notes
+  that must stay clean) as the scanner's safety net instead of per-rule examples. It is a design
+  suggestion, not a gap, and is not adopted here; it is left to the owner.
+- The peer's mutants were stated as measured and were not: its evidence fields cannot be trusted
+  for this suite. A zero-gap result from one peer raises the floor little; it does not prove no
+  gap remains.
+- Not examined: the scanner's pattern coverage (the accepted boundary in `docs/accepted-boundaries.md`);
+  storage, HTTP and file-system behaviour (plans 2b to 5).
