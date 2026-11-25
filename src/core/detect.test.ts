@@ -707,21 +707,138 @@ test("a range among recorded versions makes the answer unknown, but an explicit 
 		value: "1.3.0",
 	});
 });
-test("detection never returns a range", () => {
-	for (const range of ["^1.2.0", "~1.2"]) {
-		const files = [npmLock({ "node_modules/left-pad": entry(range) })];
-		expect<unknown>(detectInstalled("npm/left-pad", undefined, files)).toEqual({
+const NOT_EXACT = [
+	"1.x",
+	"1.2.x",
+	"x",
+	"latest",
+	"1.2",
+	"1",
+	"1.2.3-",
+	"^1.2.0",
+	"~1.2",
+];
+const UNKNOWN = { ok: true, value: undefined };
+
+test("detection never returns a range or a partial version", () => {
+	for (const bad of NOT_EXACT) {
+		const npm = [npmLock({ "node_modules/left-pad": entry(bad) })];
+		expect<unknown>(detectInstalled("npm/left-pad", undefined, npm)).toEqual(
+			UNKNOWN,
+		);
+		const cargo = [cargoLock(['name = "serde"', `version = "${bad}"`])];
+		expect<unknown>(detectInstalled("cargo/serde", undefined, cargo)).toEqual(
+			UNKNOWN,
+		);
+		const go = [goMod(`require example.com/x ${bad}`)];
+		expect<unknown>(detectInstalled("go/example.com/x", undefined, go)).toEqual(
+			UNKNOWN,
+		);
+		const goV = [goMod(`require example.com/x v${bad}`)];
+		expect<unknown>(
+			detectInstalled("go/example.com/x", undefined, goV),
+		).toEqual(UNKNOWN);
+	}
+});
+test("real versions are still returned", () => {
+	for (const good of [
+		"1.5.2",
+		"0.1.0-alpha.1+build.5",
+		"1.0.0-1",
+		"v0.0.0-20200101000000-abcdefabcdef",
+		"v1.5.2+incompatible",
+	]) {
+		const npm = [npmLock({ "node_modules/left-pad": entry(good) })];
+		expect<unknown>(detectInstalled("npm/left-pad", undefined, npm)).toEqual({
 			ok: true,
-			value: undefined,
+			value: good,
 		});
-		const cargo = [cargoLock(['name = "serde"', `version = "${range}"`])];
+		const cargo = [cargoLock(['name = "serde"', `version = "${good}"`])];
 		expect<unknown>(detectInstalled("cargo/serde", undefined, cargo)).toEqual({
 			ok: true,
-			value: undefined,
+			value: good,
 		});
-		const go = [goMod(`require example.com/x ${range}`)];
+		const go = [goMod(`require example.com/x ${good}`)];
 		expect<unknown>(detectInstalled("go/example.com/x", undefined, go)).toEqual(
-			{ ok: true, value: undefined },
+			{ ok: true, value: good },
 		);
 	}
+});
+test("one valid version plus one non-semver version for the same box is unknown", () => {
+	for (const bad of NOT_EXACT) {
+		const files = [
+			npmLock({
+				"node_modules/left-pad": entry("1.3.0"),
+				"node_modules/a/node_modules/left-pad": entry(bad),
+			}),
+		];
+		expect<unknown>(detectInstalled("npm/left-pad", undefined, files)).toEqual(
+			UNKNOWN,
+		);
+	}
+});
+test("an explicit valid version beats a bad recorded one", () => {
+	for (const bad of NOT_EXACT) {
+		const files = [npmLock({ "node_modules/left-pad": entry(bad) })];
+		expect<unknown>(detectInstalled("npm/left-pad", "2.0.0", files)).toEqual({
+			ok: true,
+			value: "2.0.0",
+		});
+	}
+});
+test("an explicit version is validated without parsing the files", () => {
+	const hostile: WorkspaceFile[] = [
+		{ name: "package-lock.json", text: "x".repeat(LIMITS.lockFileBytes) },
+	];
+	expect<unknown>(detectInstalled("npm/left-pad", "1 2", hostile)).toEqual({
+		ok: false,
+		error: "invalid-version",
+	});
+	// A getter on the file would run only if the file were read.
+	let read = false;
+	const spy = {
+		name: "package-lock.json",
+		get text(): string {
+			read = true;
+			return "{}";
+		},
+	} as WorkspaceFile;
+	expect<unknown>(detectInstalled("npm/left-pad", "1.0.0", [spy])).toEqual({
+		ok: true,
+		value: "1.0.0",
+	});
+	expect(read).toBe(false);
+});
+test("many equal recorded versions give that version, and recordedVersions keeps them all", () => {
+	const packages: Record<string, unknown> = {};
+	for (let i = 0; i < 2000; i++) {
+		packages[`node_modules/p${i}/node_modules/left-pad`] = entry("1.3.0");
+	}
+	const files = [npmLock(packages)];
+	expect(recordedVersions("npm/left-pad", files)).toHaveLength(2000);
+	expect<unknown>(detectInstalled("npm/left-pad", undefined, files)).toEqual({
+		ok: true,
+		value: "1.3.0",
+	});
+});
+test("cargo: a multi-line string opened outside a package block hides its lines", () => {
+	const text = [
+		"[metadata]",
+		'note = """',
+		"[[package]]",
+		'name = "serde"',
+		'version = "9.9.9"',
+		'"""',
+		"",
+		"[[package]]",
+		'name = "serde"',
+		'version = "1.0.0"',
+	].join("\n");
+	expect(
+		recordedVersions("cargo/serde", [{ name: "Cargo.lock", text }]),
+	).toEqual(["1.0.0"]);
+	const only = text.slice(0, text.indexOf('"""\n\n[[package]]') + 3);
+	expect(
+		recordedVersions("cargo/serde", [{ name: "Cargo.lock", text: only }]),
+	).toEqual([]);
 });

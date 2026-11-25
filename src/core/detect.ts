@@ -2,7 +2,7 @@ import { canonicalise, ecosystemOf } from "./address.ts";
 import { LIMITS } from "./limits.ts";
 import type { Result } from "./result.ts";
 import { utf8Length } from "./text.ts";
-import { resolveInstalled } from "./version.ts";
+import { canOrder, resolveInstalled } from "./version.ts";
 
 export type WorkspaceFile = {
 	name: "package-lock.json" | "Cargo.lock" | "go.mod";
@@ -104,13 +104,13 @@ function cargoVersions(address: string, text: string): string[] {
 			inBlock = line === "[[package]]";
 			continue;
 		}
-		if (!inBlock) continue;
-		const match = CARGO_STRING.exec(line);
+		const match = inBlock ? CARGO_STRING.exec(line) : null;
 		if (match !== null) {
 			if (match[1] === "name") name ??= match[2];
 			else version ??= match[2];
 			continue;
 		}
+		// Outside a package block too: a string opened anywhere hides its lines.
 		multiline = opensMultiline(line);
 	}
 	finish();
@@ -183,13 +183,6 @@ export function recordedVersions(
 	return found;
 }
 
-// A range operator that the version charset of 12.1 allows ("^" and "~"; the
-// other operators are outside the charset). resolveInstalled would accept
-// "~1.2" as a version, but a range is never an installed version (12.4 rule 4).
-function isRange(version: string): boolean {
-	return version.startsWith("^") || version.startsWith("~");
-}
-
 /** 12.4 rule 4: the explicit version, else the single recorded one, else undefined. */
 export function detectInstalled(
 	address: string,
@@ -197,9 +190,17 @@ export function detectInstalled(
 	files: readonly WorkspaceFile[],
 ): Result<string | undefined, "invalid-version"> {
 	const ecosystem = ecosystemOf(address);
-	const recorded = recordedVersions(address, files);
-	if (explicit === undefined && recorded.some(isRange)) {
+	// An explicit version decides alone: the files are not even parsed.
+	if (explicit !== undefined) return resolveInstalled(ecosystem, explicit, []);
+	// De-duplicated by exact string before resolving: the result is the same, the
+	// cost is not proportional to the number of repeats.
+	const recorded = [...new Set(recordedVersions(address, files))];
+	// A lock file records exact versions. Anything that is not strict SemVer (a
+	// range such as "^1.2.0", "~1.2", "1.x", "x", "latest", a partial "1.2")
+	// is not an installed version, and one such entry makes the answer unknown
+	// (12.4 rule 4).
+	if (!recorded.every((version) => canOrder(ecosystem, version))) {
 		return { ok: true, value: undefined };
 	}
-	return resolveInstalled(ecosystem, explicit, recorded);
+	return resolveInstalled(ecosystem, undefined, recorded);
 }
