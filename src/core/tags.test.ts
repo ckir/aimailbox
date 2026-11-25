@@ -106,9 +106,12 @@ describe("computeTags", () => {
 	});
 
 	test("a look-alike spelling still gets its tag (7.4)", () => {
-		expect(
-			computeTags("\uff43\uff55\uff52\uff4c http://example.test"),
-		).toContain("network-or-install");
+		expect(computeTags("\uff43\uff55\uff52\uff4c -s x")).toContain(
+			"network-or-install",
+		);
+		expect(computeTags("\uff45\uff56\uff41\uff4c x")).toContain(
+			"indirect-execution",
+		);
 		expect(computeTags("CURL -s x")).toContain("network-or-install");
 	});
 
