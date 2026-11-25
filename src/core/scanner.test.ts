@@ -99,6 +99,42 @@ describe("scanOutgoing secrets", () => {
 		});
 	}
 
+	test("secret-assignment finds names inside longer identifiers and quoted keys", () => {
+		const texts = [
+			`export DB_PASSWORD=${randomAlnum(16)}`,
+			`${"AWS_SECRET_" + "ACCESS_KEY"}=${randomAlnum(40)}`,
+			`GITHUB_TOKEN=${randomAlnum(30)}`,
+			`{"password": "${randomAlnum(16)}"}`,
+			`{"api_key":"${randomAlnum(20)}"}`,
+			`password = ${randomAlnum(16)}`,
+		];
+		for (const text of texts) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["secret-assignment"],
+			});
+		}
+		for (const text of [
+			"token: short",
+			"password = x",
+			`password = ${randomAlnum(11)}`,
+			`GITHUB_TOKEN=${randomAlnum(11)}`,
+			"the password field is required",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("private-key-block also matches the PGP block header", () => {
+		const header = `${"-----BEGIN " + "PGP PRIV"}${"ATE KEY BL" + "OCK-----"}`;
+		expect<unknown>(
+			scanOutgoing(`it began ${header} and went on`, EMPTY),
+		).toEqual({
+			outcome: "secret",
+			rules: ["private-key-block"],
+		});
+	});
+
 	test("github-token also matches the fine-grained form", () => {
 		const token = `${"github" + "_pat_"}${randomAlnum(60)}`;
 		expect<unknown>(scanOutgoing(`see ${token} here`, EMPTY)).toEqual({
@@ -343,10 +379,34 @@ describe("scanOutgoing context", () => {
 			"malice",
 			"alicenet",
 			"alice_two",
-			"my-alice",
-			"alice.b",
+			"alice_b",
+			"_alice",
 		]) {
 			expect<unknown>(scanOutgoing(text, ctx)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("a name ends at a sentence dot, a host dot or a hyphen (R2: only letters, digits and underscore bound it)", () => {
+		const cases: [Partial<ScanContext>, string, string][] = [
+			[{ userNames: ["alice"] }, "thanks, alice.", "alice"],
+			[{ hostNames: ["box7"] }, "it ran on box7.", "box7"],
+			[{ hostNames: ["box7"] }, "ssh box7.local", "box7"],
+			[
+				{ nonDefaultBranches: ["feature/login"] },
+				"I pushed feature/login.",
+				"feature/login",
+			],
+			[{ userNames: ["alice"] }, "ping alice-dev", "alice"],
+			[{ userNames: ["alice"] }, "alice.b", "alice"],
+			[{ userNames: ["alice"] }, "my-alice", "alice"],
+		];
+		for (const [overrides, text, name] of cases) {
+			const start = text.indexOf(name);
+			const result = scanOutgoing(text, context(overrides));
+			if (result.outcome !== "context") throw new Error(`not context: ${text}`);
+			expect(result.findings.map((finding) => finding.span)).toEqual([
+				{ start, end: start + name.length },
+			]);
 		}
 	});
 
@@ -442,6 +502,73 @@ describe("scanOutgoing context", () => {
 		expect<unknown>(result).toEqual({
 			outcome: "context",
 			findings: [{ kind: "host-name", span: { start: 6, end: 11 } }],
+		});
+	});
+
+	test("a directory ends at a path boundary", () => {
+		const home = context({ homeDirs: ["/home/u"] });
+		for (const text of [
+			"see /home/user/x",
+			"see /home/u.cfg",
+			"see /home/u-old",
+		]) {
+			expect<unknown>(scanOutgoing(text, home)).toEqual({ outcome: "clean" });
+		}
+		expect<unknown>(
+			scanOutgoing(
+				"see /home/u/app2/x",
+				context({ workDirs: ["/home/u/app"] }),
+			),
+		).toEqual({ outcome: "clean" });
+		for (const text of [
+			"see /home/u/x",
+			"see /home/u",
+			"see /home/u.",
+			'"/home/u"',
+			"/home/u/",
+		]) {
+			const result = scanOutgoing(text, home);
+			if (result.outcome !== "context") throw new Error(`not context: ${text}`);
+			expect(
+				result.findings.map((finding) => [finding.kind, finding.fix]),
+			).toEqual([["home-dir", "~"]]);
+			expect(applyFixes(text, result.findings)).toBe(
+				text.replace("/home/u", "~"),
+			);
+		}
+	});
+
+	test("a hit that reaches past a kept finding takes its fix away", () => {
+		const text = "cd /home/u/wip-x now";
+		const result = scanOutgoing(
+			text,
+			context({ homeDirs: ["/home/u"], nonDefaultBranches: ["u/wip-x"] }),
+		);
+		expect<unknown>(result).toEqual({
+			outcome: "context",
+			findings: [{ kind: "home-dir", span: { start: 3, end: 10 } }],
+		});
+		if (result.outcome !== "context") throw new Error("not context");
+		expect(isMechanical(result.findings)).toBe(false);
+		expect(applyFixes(text, result.findings)).toBe(text);
+	});
+
+	test("a hit wholly inside a kept finding changes nothing", () => {
+		const text = "cd /home/u/app/x now";
+		const result = scanOutgoing(
+			text,
+			context({
+				homeDirs: ["/home/u"],
+				workDirs: ["/home/u/app"],
+				userNames: ["u"],
+				nonDefaultBranches: ["home"],
+			}),
+		);
+		expect<unknown>(result).toEqual({
+			outcome: "context",
+			findings: [
+				{ kind: "work-dir", span: { start: 3, end: 14 }, fix: "<workspace>" },
+			],
 		});
 	});
 

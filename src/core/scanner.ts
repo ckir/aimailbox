@@ -39,7 +39,7 @@ type PatternRule = { name: string; patterns: RegExp[] };
 const PATTERN_RULES: readonly PatternRule[] = [
 	{
 		name: "private-key-block",
-		patterns: [/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/],
+		patterns: [/-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----/],
 	},
 	{ name: "aws-access-key-id", patterns: [/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/] },
 	{
@@ -75,7 +75,7 @@ const PATTERN_RULES: readonly PatternRule[] = [
 	{
 		name: "secret-assignment",
 		patterns: [
-			/\b(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key)\s*[:=]\s*["']?[^\s"']{12,}/i,
+			/(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|secret[_-]?access[_-]?key)["']?\s*[:=]\s*["']?[^\s"']{12,}/i,
 		],
 	},
 ];
@@ -213,7 +213,8 @@ function occurrences(haystack: string, needle: string): number[] {
 	return starts;
 }
 
-const WORD_CHAR = /[A-Za-z0-9_.-]/;
+const WORD_CHAR = /[A-Za-z0-9_]/;
+const PATH_WORD_CHAR = /[A-Za-z0-9_-]/;
 
 function hasBoundaries(text: string, start: number, end: number): boolean {
 	const before = start > 0 ? text.charAt(start - 1) : "";
@@ -248,6 +249,15 @@ function pushHits(
 	}
 }
 
+/** A directory hit ends at a path boundary: end of text, or neither a word character nor a dot that continues into one. */
+function endsAtPathBoundary(text: string, end: number): boolean {
+	if (end >= text.length) return true;
+	const after = text.charAt(end);
+	if (PATH_WORD_CHAR.test(after)) return false;
+	if (after === "." && PATH_WORD_CHAR.test(text.charAt(end + 1))) return false;
+	return true;
+}
+
 function directoryHits(
 	text: string,
 	entries: readonly string[],
@@ -257,7 +267,15 @@ function directoryHits(
 ): void {
 	for (const entry of new Set(entries)) {
 		if (entry === "") continue;
-		pushHits(hits, kind, occurrences(text, entry), entry.length, fix);
+		pushHits(
+			hits,
+			kind,
+			occurrences(text, entry).filter((start) =>
+				endsAtPathBoundary(text, start + entry.length),
+			),
+			entry.length,
+			fix,
+		);
 	}
 }
 
@@ -322,8 +340,12 @@ function resolveOverlaps(hits: Hit[]): Hit[] {
 	const kept: Hit[] = [];
 	for (const hit of sorted) {
 		const previous = kept[kept.length - 1];
-		if (previous !== undefined && hit.start < previous.end) continue;
-		kept.push(hit);
+		if (previous !== undefined && hit.start < previous.end) {
+			// A hit that reaches past the kept one means a fix would cut it in two: keep the finding, drop its fix.
+			if (hit.end > previous.end) delete previous.fix;
+			continue;
+		}
+		kept.push({ ...hit });
 	}
 	return kept;
 }
