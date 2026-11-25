@@ -258,6 +258,12 @@ function endsAtPathBoundary(text: string, end: number): boolean {
 	return true;
 }
 
+/** The entry without its trailing slashes; a non-empty entry made only of slashes becomes "/", and an empty one stays empty. */
+function withoutTrailingSlashes(entry: string): string {
+	const trimmed = entry.replace(/\/+$/, "");
+	return trimmed === "" && entry !== "" ? "/" : trimmed;
+}
+
 function directoryHits(
 	text: string,
 	entries: readonly string[],
@@ -265,7 +271,8 @@ function directoryHits(
 	fix: string,
 	hits: Hit[],
 ): void {
-	for (const entry of new Set(entries)) {
+	for (const given of new Set(entries)) {
+		const entry = withoutTrailingSlashes(given);
 		if (entry === "") continue;
 		pushHits(
 			hits,

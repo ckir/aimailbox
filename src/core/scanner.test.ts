@@ -538,6 +538,48 @@ describe("scanOutgoing context", () => {
 		}
 	});
 
+	test("trailing slashes of a directory entry are ignored", () => {
+		const home = scanOutgoing(
+			"see /home/u/foo",
+			context({ homeDirs: ["/home/u/"] }),
+		);
+		expect<unknown>(home).toEqual({
+			outcome: "context",
+			findings: [{ kind: "home-dir", span: { start: 4, end: 11 }, fix: "~" }],
+		});
+		if (home.outcome !== "context") throw new Error("not context");
+		expect(applyFixes("see /home/u/foo", home.findings)).toBe("see ~/foo");
+		expect<unknown>(
+			scanOutgoing(
+				"see /home/u/app/src",
+				context({ workDirs: ["/home/u/app//"] }),
+			),
+		).toEqual({
+			outcome: "context",
+			findings: [
+				{ kind: "work-dir", span: { start: 4, end: 15 }, fix: "<workspace>" },
+			],
+		});
+	});
+
+	test("the entry / alone matches a slash followed by a boundary", () => {
+		const root = context({ homeDirs: ["/"] });
+		expect<unknown>(scanOutgoing("see /home/u", root)).toEqual({
+			outcome: "clean",
+		});
+		expect<unknown>(scanOutgoing("the root / is full", root)).toEqual({
+			outcome: "context",
+			findings: [{ kind: "home-dir", span: { start: 9, end: 10 }, fix: "~" }],
+		});
+		// slashes only: the same entry
+		expect<unknown>(
+			scanOutgoing("the root / is full", context({ homeDirs: ["//"] })),
+		).toEqual({
+			outcome: "context",
+			findings: [{ kind: "home-dir", span: { start: 9, end: 10 }, fix: "~" }],
+		});
+	});
+
 	test("a hit that reaches past a kept finding takes its fix away", () => {
 		const text = "cd /home/u/wip-x now";
 		const result = scanOutgoing(
