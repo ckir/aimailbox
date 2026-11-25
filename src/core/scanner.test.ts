@@ -405,6 +405,44 @@ describe("scanOutgoing secrets", () => {
 		}
 	});
 
+	test("cookie-header looks at every pair on the header line (R34)", () => {
+		const hex = (count: number) =>
+			Array.from({ length: count }, () =>
+				"0123456789abcdef".charAt(Math.floor(Math.random() * 16)),
+			).join("");
+		for (const text of [
+			`Cookie: lang=en; session=${hex(32)}`,
+			`Cookie: a=1; b=2; auth=${hex(32)}; c=3`,
+			`Set-Cookie: theme=dark; sid=${randomAlnum(24)}; Path=/`,
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["cookie-header"],
+			});
+		}
+		for (const text of [
+			"Cookie: lang=en; theme=dark",
+			"Set-Cookie: path=/api/v2/organizations/settings",
+			"Cookie: domain=subdomain.example.com; path=/",
+			"the cookie banner was shown; x=1234567890123456",
+			"Cookie: session",
+			"the cookie header is set by the server",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("cookie-header does not backtrack badly on long input (R34)", () => {
+		for (const text of [
+			`Cookie: ${"a".repeat(200000)}`,
+			`cookie:${"a=".repeat(100000)}`,
+		]) {
+			const started = performance.now();
+			scanOutgoing(text, EMPTY);
+			expect(performance.now() - started).toBeLessThan(2000);
+		}
+	});
+
 	test("ordinary technical text stays clean", () => {
 		const sha = Array.from({ length: 40 }, () =>
 			"0123456789abcdef".charAt(Math.floor(Math.random() * 16)),
@@ -963,7 +1001,7 @@ describe("scanOutgoing context", () => {
 		expect<unknown>(
 			scanOutgoing("copied from /mnt/backup/home/u/notes.txt", ctx),
 		).toEqual({ outcome: "clean" });
-		for (const before of ["a", "Z", "0", "_", ".", "~", "-"]) {
+		for (const before of ["a", "Z", "0", "_", ".", "-"]) {
 			expect<unknown>(scanOutgoing(`x${before}/home/u/y`, ctx)).toEqual({
 				outcome: "clean",
 			});
@@ -981,6 +1019,80 @@ describe("scanOutgoing context", () => {
 		found("(/home/u)", 1);
 		found("file:///home/u/x", 7);
 		found("cd\n/home/u", 3);
+	});
+
+	test("a tilde before a directory is not part of a path word (R35)", () => {
+		const ctx = context({ homeDirs: ["/home/alice"] });
+		const tilde = scanOutgoing("I checked in ~/home/alice/file.ts", ctx);
+		if (tilde.outcome !== "context") throw new Error("not context");
+		expect(tilde.findings.map((finding) => finding.kind)).toEqual(["home-dir"]);
+		// a fix must not leave a path that the scan still flags without being able to fix it
+		const text = "/home/alice/home/alice";
+		const first = scanOutgoing(text, ctx);
+		if (first.outcome !== "context") throw new Error("not context");
+		expect(isMechanical(first.findings)).toBe(true);
+		const fixed = applyFixes(text, first.findings);
+		expect<unknown>(scanOutgoing(fixed, ctx)).not.toEqual({ outcome: "clean" });
+	});
+
+	test("a percent-encoded directory is a finding without a fix (R36)", () => {
+		const ctx = context({ homeDirs: ["/home/alice"] });
+		for (const encoded of ["%2Fhome%2Falice", "%2fhome%2falice"]) {
+			const text = `https://gitlab.com/api?path=${encoded}%2Fproject`;
+			const start = text.indexOf("%2");
+			const result = scanOutgoing(text, ctx);
+			expect<unknown>(result).toEqual({
+				outcome: "context",
+				findings: [
+					{
+						kind: "home-dir",
+						span: { start, end: start + encoded.length },
+					},
+				],
+			});
+			if (result.outcome !== "context") throw new Error("not context");
+			expect(isMechanical(result.findings)).toBe(false);
+		}
+		expect<unknown>(
+			scanOutgoing("https://gitlab.com/api?path=%2Fhome%2Falicia", ctx),
+		).toEqual({ outcome: "clean" });
+		expect<unknown>(
+			scanOutgoing("https://gitlab.com/api?path=%2Fmnt%2Fhome%2Falice", ctx),
+		).toEqual({ outcome: "clean" });
+		expect<unknown>(scanOutgoing("see /home/alice/x", ctx)).toEqual({
+			outcome: "context",
+			findings: [{ kind: "home-dir", span: { start: 4, end: 15 }, fix: "~" }],
+		});
+		// a work directory is matched the same way
+		expect<unknown>(
+			scanOutgoing("q=%2Fsrv%2Fapp", context({ workDirs: ["/srv/app"] })),
+		).toEqual({
+			outcome: "context",
+			findings: [{ kind: "work-dir", span: { start: 2, end: 14 } }],
+		});
+		// a plain and an encoded hit together: both are found, in order, only the plain one has a fix
+		const both = "cd /home/alice then ?p=%2Fhome%2Falice";
+		const encodedStart = both.indexOf("%2F");
+		expect<unknown>(scanOutgoing(both, ctx)).toEqual({
+			outcome: "context",
+			findings: [
+				{ kind: "home-dir", span: { start: 3, end: 14 }, fix: "~" },
+				{
+					kind: "home-dir",
+					span: { start: encodedStart, end: encodedStart + 15 },
+				},
+			],
+		});
+		// overlap resolution: the longer encoded work directory wins over the encoded home directory inside it
+		expect<unknown>(
+			scanOutgoing(
+				"?p=%2Fhome%2Falice%2Fapp",
+				context({ homeDirs: ["/home/alice"], workDirs: ["/home/alice/app"] }),
+			),
+		).toEqual({
+			outcome: "context",
+			findings: [{ kind: "work-dir", span: { start: 3, end: 24 } }],
+		});
 	});
 
 	test("a hit that reaches past a kept finding takes its fix away", () => {

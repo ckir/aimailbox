@@ -92,7 +92,7 @@ const PATTERN_RULES: readonly PatternRule[] = [
 	{
 		name: "cookie-header",
 		patterns: [
-			/(?:^|[^a-z])(?:set-)?cookie\s*:\s*(?!(?:path|domain|expires|max-age|samesite|secure|httponly|priority|version|comment)\s*=)[A-Za-z0-9_.~%-]+=[^\s;]{16,}/i,
+			/(?:^|[^a-z])(?:set-)?cookie\s*:[^\n]*?(?<![A-Za-z0-9_.~%-])(?!(?:path|domain|expires|max-age|samesite|secure|httponly|priority|version|comment)\s*=)[A-Za-z0-9_.~%-]+=[^\s;]{16,}/i,
 		],
 	},
 	{ name: "docker-auth", patterns: [/"auth"\s*:\s*"[A-Za-z0-9+/=]{16,}"/] },
@@ -233,7 +233,7 @@ function occurrences(haystack: string, needle: string): number[] {
 
 const WORD_CHAR = /[A-Za-z0-9_]/;
 const PATH_WORD_CHAR = /[A-Za-z0-9_-]/;
-const PATH_LEADING_CHAR = /[A-Za-z0-9_.~-]/;
+const PATH_LEADING_CHAR = /[A-Za-z0-9_.-]/;
 
 function hasBoundaries(text: string, start: number, end: number): boolean {
 	const before = start > 0 ? text.charAt(start - 1) : "";
@@ -288,6 +288,10 @@ function withoutTrailingSlashes(entry: string): string {
 	return trimmed === "" && entry !== "" ? "/" : trimmed;
 }
 
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function directoryHits(
 	text: string,
 	entries: readonly string[],
@@ -310,6 +314,26 @@ function directoryHits(
 			entry.length,
 			fix,
 		);
+		// A percent-encoded path ("%2Fhome%2Falice") is flagged but has no fix: it
+		// is not a mechanical redaction.
+		if (!entry.includes("/")) continue;
+		const encoded = new RegExp(
+			entry.split("/").map(escapeRegExp).join("%2[Ff]"),
+			"g",
+		);
+		for (
+			let match = encoded.exec(text);
+			match !== null;
+			match = encoded.exec(text)
+		) {
+			encoded.lastIndex = match.index + 1;
+			if (
+				startsAtPathBoundary(text, match.index) &&
+				endsAtPathBoundary(text, match.index + match[0].length)
+			) {
+				pushHits(hits, kind, [match.index], match[0].length);
+			}
+		}
 	}
 }
 
@@ -337,10 +361,6 @@ function nameHits(
 }
 
 const HOST_CHAR = /[a-z0-9.-]/;
-
-function escapeRegExp(value: string): string {
-	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 /**
  * Entries are canonical "host/path". A remote is found as the host (not the tail
