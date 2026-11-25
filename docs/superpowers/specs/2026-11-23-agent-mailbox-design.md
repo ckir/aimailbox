@@ -511,22 +511,26 @@ public static file: a note, a reply, a signal, a flag, a retraction, or the word
    - A sub-agent is part of the session that started it. On Claude Code it carries the main
      session's id in its payload and its variable (its own id is `agent_id`), so this holds with
      no further work. On Antigravity (measured) a sub-agent has its own conversation id, and its
-     hook payload names no parent; the harness records the parent, but a hook process cannot
-     reach that record. A hook call on Antigravity whose session has no record of its own is
-     therefore armed when any session recorded in the same workspace has a read within the
-     lifetime of a workspace mark (12 hours), unless the adapter can show that the session is
-     not a sub-agent of a recorded one, by a means the plan that builds the adapter has
-     measured (15). Stated cost, my call: after one Antigravity session has read, an unrelated
-     second session in that workspace that has no record of its own confirms on the high-risk
-     classes for up to that time.
+     hook payload names no parent; the harness records the parent, but a hook process is not
+     given the address and token to ask for it (measured: its environment holds only
+     `ANTIGRAVITY_CONVERSATION_ID` of the `ANTIGRAVITY_` variables). A sub-agent may also be given
+     a workspace of its own (the harness's sub-agent specification has a workspace field; read as
+     a symbol name only, not run). A hook call on Antigravity whose session has no record of its
+     own is therefore armed when any session recorded in the same workspace, or in another
+     working tree of the same repository (8.4), has a read within the lifetime of a workspace
+     mark (12 hours), unless the adapter can show that the session is not a sub-agent of a
+     recorded one, by a means the plan that builds the adapter has measured (15). A session
+     that has read is armed by its own record. Stated cost, my call: after one Antigravity
+     session has read, an unrelated second session there that has no record of its own confirms
+     on the high-risk classes for up to that time.
    - A read with no session warns, and marks the workspace as having read. The mark expires
      after a fixed time (`[PROPOSED, UNMEASURED]` 12 hours).
    - A hook call with a known session is armed if that session is recorded, or if the workspace
-     is marked.
+     is marked, or, on Antigravity, as the sub-agent case above says.
    - A hook call with no session always confirms on the high-risk classes.
    - With no session on a command call, every send needs the human.
-6. Every read emits a machine-readable record: session if known, the box, whether summaries or a
-   body were printed, whether they came from a lookup, a search or the send flow, and the warning
+6. Every read emits a machine-readable record: session if known, the workspace, the box, whether
+   summaries or a body were printed, whether they came from a lookup, a search or the send flow, and the warning
    tags. The record is what 8.3 and the gate are computed from.
 7. Where "denied" holds and where it does not, measured on 2026-11-25
    (`docs/superpowers/specs/2026-11-25-harness-source-checks.md`, findings 2, 3 and 5). Rule 3
@@ -1094,7 +1098,7 @@ Calls the author made that the owner has not ruled on (correct any of them):
 - The gate classifies by coarse fixed rules and is best effort; where nobody can be asked a gated
   action is denied (9.2 rules 3 and 4).
 - Revision 9, from the harness checks: an Antigravity session with no record of its own is armed
-  by a recorded read in its workspace within 12 hours, because a sub-agent there has its own
+  by a recorded read in its workspace or another working tree of its repository within 12 hours, because a sub-agent there has its own
   session and names no parent (9.2 rule 5); an adapter whose harness has not been measured to
   give a proof of approval does not claim a harness-produced confirmation, so a confirmation-
   requiring item falls back to local saving and a command for the human (8.5); setup does not
@@ -1231,7 +1235,9 @@ service after its own scan (8.7), and the box's files and manifest are replaced 
 1 network, unverified" (11.2 rule 3). After the tool's next release the first machine's lookup,
 given version 1.3.0, adds one line asking whether the problem still happens (12.6). That lookup
 also printed other senders' summaries, which is a read, so when the agent sends the resolved
-signal from that version the harness asks its human first (8.3, 8.5, 12.2).
+signal from that version the harness asks its human first (8.3, 8.5, 12.2). Until the adapter
+has a measured proof of approval (8.5, revision 9), that signal is not sent from the session and
+the client prints the command for the human to run.
 
 ## Appendix A. Review ledger
 
@@ -1575,7 +1581,15 @@ request. The revision changes what an adapter and the client must do, so it is n
 - 9.3 rule 3 (new) points setup at the measured rule and hook locations and states two limits.
 - 13.1 names the proofs; section 15 marks three source checks done, lists what remains before
   plan 5 and lists the revision's calls.
-- Not reviewed by a panel: see the end of this entry for the narrow read of the second agent.
+- Read by the second agent on the diff only (one round, four verified findings folded, one
+  rejected): a hook process was said to be unable to reach the parent record, but only the
+  missing address and token were measured, so the text now says that; the known-session arming
+  line and the read record (9.2 rules 5 and 6) did not allow for the new sub-agent case and did
+  not hold the workspace, now amended; a sub-agent can have a workspace of its own, so the
+  fallback also counts another working tree of the repository; section 16's last signal
+  assumed an in-session confirmation that 8.5 now withholds until measured. Rejected: that a
+  sub-agent which reads escapes the fallback, because its own record arms it. Not run again:
+  no second round.
 
 ## Stand-downs
 
