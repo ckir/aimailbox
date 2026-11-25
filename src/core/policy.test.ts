@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { canonicalise } from "./address.ts";
 import {
 	type Call,
 	DEFAULT_POLICY,
@@ -306,11 +307,10 @@ describe("resolvePolicy", () => {
 		const p = policy([{ remote: "github.com/me/repo", mode: "allow" }]);
 		const remotes = [
 			"git@gitlab.com:me/mirror.git",
-			"not a remote",
 			"git@github.com:me/repo.git",
 		];
 		expect(modeOf(p, call({ remotes }))).toBe("allow");
-		expect(modeOf(p, call({ remotes: remotes.slice(0, 2) }))).toBe("deny");
+		expect(modeOf(p, call({ remotes: remotes.slice(0, 1) }))).toBe("deny");
 		expect(modeOf(p, call({ remotes: [] }))).toBe("deny");
 	});
 
@@ -368,6 +368,130 @@ describe("resolvePolicy", () => {
 		const p = policy([{ directory: "/work/app", mode: "deny" }], "allow");
 		expect(modeOf(p, call())).toBe("deny");
 		expect(modeOf(p, call({ directory: "/elsewhere" }))).toBe("allow");
+	});
+	test("a call directory that is not absolute and normalised resolves to deny", () => {
+		const p = policy(
+			[
+				{ directory: "/work/app", mode: "allow" },
+				{ directory: "/work/secret", mode: "deny" },
+			],
+			"allow",
+		);
+		for (const directory of [
+			"/work/app/../secret",
+			"work/secret",
+			"/work/./secret",
+			"/work//secret",
+			"/work/app/..",
+			"",
+			"/work/app\0/src",
+		]) {
+			expect(resolvePolicy(p, call({ directory }))).toEqual({
+				mode: "deny",
+				vetoed: false,
+				unattendedPostRead: false,
+			});
+		}
+		const open = policy([{ directory: "/", mode: "allow" }], "allow", true);
+		expect(modeOf(open, call({ directory: "work" }))).toBe("deny");
+		expect(resolvePolicy(open, call({ directory: "/" })).mode).toBe("allow");
+	});
+
+	test("a call directory with a trailing slash still matches", () => {
+		const p = policy([{ directory: "/work/app", mode: "allow" }]);
+		expect(modeOf(p, call({ directory: "/work/app/src/" }))).toBe("allow");
+		expect(modeOf(p, call({ directory: "/work/app/" }))).toBe("allow");
+		expect(modeOf(p, call({ directory: "/work/application/" }))).toBe("deny");
+	});
+
+	describe("an unparsable call remote", () => {
+		const unparsable = [
+			"git@github.com:/me/repo.git",
+			"ssh://git@github.com//me/repo",
+			"github.com.",
+			"github.com/me/repo\n",
+		];
+		const denyRule: PolicyEntry = {
+			remote: "github.com/me/repo",
+			mode: "deny",
+		};
+
+		test("is refused by canonicalise, as the cases below assume", () => {
+			for (const remote of unparsable) {
+				expect<unknown>(canonicalise(`tool/${remote}`)).toMatchObject({
+					ok: false,
+				});
+			}
+		});
+
+		test("caps the mode at confirm-each when the policy has a remote rule", () => {
+			const p = policy([denyRule], "allow", true);
+			expect(modeOf(p, call({ remotes: ["github.com/me/repo"] }))).toBe("deny");
+			for (const remote of unparsable) {
+				expect(resolvePolicy(p, call({ remotes: [remote] }))).toEqual({
+					mode: "confirm-each",
+					vetoed: false,
+					unattendedPostRead: false,
+				});
+			}
+		});
+
+		test("never loosens a deny", () => {
+			const p = policy([denyRule], "deny", true);
+			expect(modeOf(p, call({ remotes: unparsable }))).toBe("deny");
+			const dir = policy(
+				[{ directory: "/work/app", mode: "deny" }, denyRule],
+				"allow",
+			);
+			expect(modeOf(dir, call({ remotes: unparsable }))).toBe("deny");
+		});
+
+		test("is ignored when the policy has only directory rules", () => {
+			const p = policy(
+				[{ directory: "/work/app", mode: "allow" }],
+				"deny",
+				true,
+			);
+			expect(resolvePolicy(p, call({ remotes: unparsable }))).toEqual({
+				mode: "allow",
+				vetoed: false,
+				unattendedPostRead: true,
+			});
+			const none = policy([], "allow", true);
+			expect(resolvePolicy(none, call({ remotes: unparsable }))).toEqual({
+				mode: "allow",
+				vetoed: false,
+				unattendedPostRead: true,
+			});
+		});
+
+		test("beside a valid non-matching remote still caps at confirm-each", () => {
+			const p = policy([denyRule], "allow", true);
+			const remotes = ["git@github.com:me/other.git", "github.com."];
+			expect(resolvePolicy(p, call({ remotes }))).toEqual({
+				mode: "confirm-each",
+				vetoed: false,
+				unattendedPostRead: false,
+			});
+			expect(
+				resolvePolicy(p, call({ remotes: ["git@github.com:me/other.git"] })),
+			).toEqual({ mode: "allow", vetoed: false, unattendedPostRead: true });
+		});
+	});
+
+	test("the default policy cannot be changed at runtime and stays deny", () => {
+		expect(() => {
+			DEFAULT_POLICY.defaultMode = "allow";
+		}).toThrow();
+		expect(() => {
+			DEFAULT_POLICY.rules.push({ directory: "/", mode: "allow" });
+		}).toThrow();
+		expect(DEFAULT_POLICY.rules).toEqual([]);
+		expect(resolvePolicy(DEFAULT_POLICY, call())).toEqual({
+			mode: "deny",
+			vetoed: false,
+			unattendedPostRead: false,
+		});
 	});
 });
 

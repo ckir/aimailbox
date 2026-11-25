@@ -15,12 +15,13 @@ export type Policy = {
 };
 export type PolicyError = "not-an-object" | "unknown-format" | "bad-field";
 
-export const DEFAULT_POLICY: Policy = {
+// Deep-frozen: the default is shared, so no caller may loosen it at runtime.
+export const DEFAULT_POLICY: Policy = Object.freeze({
 	formatVersion: 1,
 	defaultMode: "deny",
 	unattendedPostRead: false,
-	rules: [],
-};
+	rules: Object.freeze([]) as unknown as PolicyEntry[],
+});
 
 const TOOL_PREFIX = "tool/";
 const MODES: readonly PolicyMode[] = ["deny", "confirm-each", "allow"];
@@ -152,37 +153,55 @@ function directoryMatches(rule: string, directory: string): boolean {
 	return directory === rule || directory.startsWith(`${rule}/`);
 }
 
-function callRemotes(remotes: readonly string[]): Set<string> {
+// Remotes the policy can compare, and whether any of them was refused by canonicalise.
+function callRemotes(remotes: readonly string[]): {
+	found: Set<string>;
+	unparsable: boolean;
+} {
 	const found = new Set<string>();
+	let unparsable = false;
 	for (const remote of remotes) {
 		const canonical = canonicalRemote(remote);
-		if (canonical !== undefined) found.add(canonical);
+		if (canonical === undefined) unparsable = true;
+		else found.add(canonical);
 	}
-	return found;
+	return { found, unparsable };
 }
 
+// The policy argument must come from readPolicy or DEFAULT_POLICY.
 export function resolvePolicy(policy: Policy, call: Call): Resolution {
 	if (call.vetoed)
 		return { mode: "deny", vetoed: true, unattendedPostRead: false };
+	// Fail closed: a directory that is not absolute and normalised cannot be placed
+	// under a rule (a "/a/../b" would match the rule for "/a"), so it matches none.
+	const directory = readDirectory(call.directory);
+	if (directory === undefined) {
+		return { mode: "deny", vetoed: false, unattendedPostRead: false };
+	}
 	const remotes = callRemotes(call.remotes);
 	let mode: PolicyMode | undefined;
 	let unattendedPostRead = policy.unattendedPostRead;
 	for (const entry of policy.rules) {
 		const matches =
 			"directory" in entry
-				? directoryMatches(entry.directory, call.directory)
-				: remotes.has(entry.remote);
+				? directoryMatches(entry.directory, directory)
+				: remotes.found.has(entry.remote);
 		if (!matches) continue;
 		if (mode === undefined || RESTRICTION[entry.mode] > RESTRICTION[mode]) {
 			mode = entry.mode;
 		}
 		if (entry.unattendedPostRead === false) unattendedPostRead = false;
 	}
-	return {
-		mode: mode ?? policy.defaultMode,
-		vetoed: false,
-		unattendedPostRead,
-	};
+	let resolved = mode ?? policy.defaultMode;
+	// Fail closed: a remote that cannot be compared might have matched a remote rule,
+	// so with remote rules in play the human is asked at least, and nothing is unattended.
+	if (remotes.unparsable && policy.rules.some((entry) => "remote" in entry)) {
+		if (RESTRICTION[resolved] < RESTRICTION["confirm-each"]) {
+			resolved = "confirm-each";
+		}
+		unattendedPostRead = false;
+	}
+	return { mode: resolved, vetoed: false, unattendedPostRead };
 }
 
 export type Permission = "yes" | "needs-human" | "no";
