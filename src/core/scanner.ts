@@ -66,6 +66,8 @@ const PATTERN_RULES: readonly PatternRule[] = [
 			/\bdop_v1_[A-Za-z0-9]{20,}/,
 			/\bshp(?:at|ca|pa|ss)_[A-Za-z0-9]{20,}/,
 			/\bya29\.[A-Za-z0-9_-]{30,}/,
+			/\bAGE-SECRET-KEY-[A-Z0-9]{40,}/,
+			/\bhvs\.[A-Za-z0-9_-]{20,}/,
 		],
 	},
 	{
@@ -87,7 +89,7 @@ const PATTERN_RULES: readonly PatternRule[] = [
 	{
 		name: "secret-assignment",
 		patterns: [
-			/(?:password|passwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|secret[_-]?access[_-]?key|credentials?|account[_-]?key|sas[_-]?token|shared[_-]?access[_-]?key)["']?\s*[:=]\s*(?:"[^"\n]{12,}"|'[^'\n]{12,}'|["']?[^\s"']{12,})/i,
+			/(?:password|passwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|secret[_-]?key|secret[_-]?access[_-]?key|credentials?|account[_-]?key|sas[_-]?token|shared[_-]?access[_-]?key)["']?\s*[:=]\s*(?:"[^"\n]{12,}"|'[^'\n]{12,}'|["']?[^\s"']{12,})/i,
 		],
 	},
 	{
@@ -104,6 +106,7 @@ const PATTERN_RULES: readonly PatternRule[] = [
 			/\bsshpass\s+-p\s*\S{6,}/,
 			/(?:^|\s)--(?:password|passwd|pass|token|secret|api-key|apikey|access-key|secret-key)(?:=|\s+)(?!-)\S{8,}/i,
 			/\bmysql\b[^\n]{0,100}?\s-p\S{8,}/,
+			/\b(?:docker|podman|helm|skopeo)\s+(?:registry\s+)?login\b[^\n]{0,100}?\s(?:-p|--password)[ =]\S{6,}/,
 			/\baws\s+configure\s+set\s+\S*(?:secret|token|key)\S*\s+\S{12,}/i,
 		],
 	},

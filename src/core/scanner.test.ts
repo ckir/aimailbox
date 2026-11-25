@@ -556,6 +556,70 @@ describe("scanOutgoing secrets", () => {
 		});
 	});
 
+	test("secret-assignment covers the secret_key name (R41)", () => {
+		for (const text of [
+			`secret_key: "${randomAlnum(20)}"`,
+			`app.secretKey = ${randomAlnum(24)}`,
+			`SECRET-KEY=${randomAlnum(20)}`,
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["secret-assignment"],
+			});
+		}
+		for (const text of [
+			"the secret_key setting is required",
+			"secret_key: short",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("api-key-prefix covers age secret keys and Vault service tokens (R42)", () => {
+		const upperDigits = (count: number) => randomAlnum(count).toUpperCase();
+		for (const text of [
+			`${"AGE-SECRET-" + "KEY-"}1${upperDigits(58)}`,
+			`${"hv" + "s."}${randomAlnum(40)}`,
+		]) {
+			expect<unknown>(scanOutgoing(`I pasted ${text} here`, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["api-key-prefix"],
+			});
+		}
+		for (const text of [
+			`${"AGE-SECRET-" + "KEY-"}1ABC`,
+			`${"hv" + "s."}short`,
+		]) {
+			expect<unknown>(scanOutgoing(`I pasted ${text} here`, EMPTY)).toEqual({
+				outcome: "clean",
+			});
+		}
+	});
+
+	test("cli-credentials finds a registry login password (R43)", () => {
+		for (const text of [
+			`docker login -u user -p ${randomAlnum(20)} registry.example.com`,
+			`helm registry login ghcr.io --password ${randomAlnum(16)}`,
+			`podman login -p ${randomAlnum(12)} reg`,
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["cli-credentials"],
+			});
+		}
+		for (const text of [
+			"docker run --rm -p 8080:80 nginx",
+			"docker login registry.example.com",
+			"docker login -u user",
+			"ssh -p 2222 host",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+		const started = performance.now();
+		scanOutgoing(`docker login ${"a ".repeat(100000)}`, EMPTY);
+		expect(performance.now() - started).toBeLessThan(1000);
+	});
+
 	test("ordinary technical text stays clean", () => {
 		const sha = Array.from({ length: 40 }, () =>
 			"0123456789abcdef".charAt(Math.floor(Math.random() * 16)),
