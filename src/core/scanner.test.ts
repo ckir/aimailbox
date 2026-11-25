@@ -78,6 +78,11 @@ const CASES: Record<
 		secret: randomAlnum(16),
 		nearMiss: "the config had password = x in it",
 	},
+	"cookie-header": {
+		draft: (s) => `the request sent Cookie: session=${s} to the host`,
+		secret: randomAlnum(24),
+		nearMiss: "the request sent Cookie: a=b to the host",
+	},
 };
 
 describe("scanOutgoing secrets", () => {
@@ -183,6 +188,103 @@ describe("scanOutgoing secrets", () => {
 		}
 	});
 
+	test("url-credentials covers base64 characters in a colon-less userinfo (R26)", () => {
+		for (const userinfo of [
+			`${randomAlnum(29)}=`,
+			`${randomAlnum(28)}==`,
+			`${randomAlnum(14)}+${randomAlnum(15)}`,
+			randomAlnum(30),
+		]) {
+			expect<unknown>(
+				scanOutgoing(
+					`git clone https://${userinfo}@gitlab.com/org/repo`,
+					EMPTY,
+				),
+			).toEqual({ outcome: "secret", rules: ["url-credentials"] });
+		}
+		for (const text of [
+			`git clone https://${randomAlnum(19)}@gitlab.com/org/repo`,
+			`git clone https://${randomAlnum(18)}=@gitlab.com/org/repo`,
+			"git clone https://git@github.com/org/repo",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("bearer-header covers the ApiKey, Api-Key, Negotiate and NTLM schemes (R27)", () => {
+		const hex = Array.from({ length: 40 }, () =>
+			"0123456789abcdef".charAt(Math.floor(Math.random() * 16)),
+		).join("");
+		for (const text of [
+			`Authorization: ApiKey ${hex}`,
+			`Authorization: Api-Key ${hex}`,
+			`Authorization: Negotiate ${randomAlnum(30)}==`,
+			`Authorization: NTLM ${randomAlnum(30)}==`,
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["bearer-header"],
+			});
+		}
+		for (const text of [
+			"Authorization: ApiKey abc",
+			"the ApiKey scheme is documented elsewhere",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("secret-assignment covers passphrase (R28)", () => {
+		for (const text of [
+			'passphrase: "correct horse battery staple"',
+			`passphrase = ${randomAlnum(20)}`,
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["secret-assignment"],
+			});
+		}
+		for (const text of ["passphrase = x", "the passphrase is required"]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("cookie-header finds a cookie with a long value (R29)", () => {
+		const cases: [string, string[]][] = [
+			[`Cookie: session=${randomAlnum(30)}`, ["cookie-header"]],
+			[`Set-Cookie: sid=${randomAlnum(24)}; Path=/`, ["cookie-header"]],
+			// the name "token" also trips secret-assignment, so both rules report, sorted by name
+			[
+				`cookie : token=${randomAlnum(20)}`,
+				["cookie-header", "secret-assignment"],
+			],
+		];
+		for (const [text, rules] of cases) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules,
+			});
+		}
+		for (const text of [
+			"Cookie: a=b",
+			"the cookie banner was shown",
+			"Cookie: ",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("ordinary sentences about these headers stay clean", () => {
+		for (const text of [
+			"The Authorization header uses the Token scheme, see RFC 7235",
+			"Use Authorization: Bearer <your token here> in requests",
+			"git clone https://github.com/org/repo and https://user@github.com/org/repo",
+			"the cookie header is set by the server",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
 	test("private-key-block also matches the PGP block header", () => {
 		const header = `${"-----BEGIN " + "PGP PRIV"}${"ATE KEY BL" + "OCK-----"}`;
 		expect<unknown>(
@@ -213,6 +315,7 @@ describe("scanOutgoing secrets", () => {
 			"bearer-header",
 			"url-credentials",
 			"secret-assignment",
+			"cookie-header",
 			"env-value",
 		]);
 	});

@@ -69,17 +69,23 @@ const PATTERN_RULES: readonly PatternRule[] = [
 	{
 		name: "bearer-header",
 		patterns: [
-			/(?:authorization|proxy-authorization)\s*:\s*(?:bearer|basic|token|digest)\s+[A-Za-z0-9._~+/=-]{16,}/i,
+			/(?:authorization|proxy-authorization)\s*:\s*(?:bearer|basic|token|digest|apikey|api-key|negotiate|ntlm)\s+[A-Za-z0-9._~+/=-]{16,}/i,
 		],
 	},
 	{
 		name: "url-credentials",
-		patterns: [/:\/\/[^/\s:@]+:[^/\s@]+@/, /:\/\/[A-Za-z0-9._~%-]{20,}@/],
+		patterns: [/:\/\/[^/\s:@]+:[^/\s@]+@/, /:\/\/[A-Za-z0-9._~%+=-]{20,}@/],
 	},
 	{
 		name: "secret-assignment",
 		patterns: [
-			/(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|secret[_-]?access[_-]?key)["']?\s*[:=]\s*(?:"[^"\n]{12,}"|'[^'\n]{12,}'|["']?[^\s"']{12,})/i,
+			/(?:password|passwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|secret[_-]?access[_-]?key)["']?\s*[:=]\s*(?:"[^"\n]{12,}"|'[^'\n]{12,}'|["']?[^\s"']{12,})/i,
+		],
+	},
+	{
+		name: "cookie-header",
+		patterns: [
+			/(?:^|[^a-z])(?:set-)?cookie\s*:\s*[A-Za-z0-9_.~%-]+=[^\s;]{16,}/i,
 		],
 	},
 ];
