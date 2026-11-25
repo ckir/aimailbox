@@ -1,5 +1,6 @@
 import { foldText } from "./fold.ts";
 import { LIMITS } from "./limits.ts";
+import { stripForbidden } from "./text.ts";
 
 export type ScanContext = {
 	homeDirs: readonly string[]; // the home directory as given and resolved
@@ -35,7 +36,7 @@ export type ScanOutcome =
 
 type PatternRule = { name: string; patterns: RegExp[] };
 
-/** The pattern rules run on the exact text, with no folding. The env-value rule is not a pattern and is handled in `envValueMatches`. */
+/** The pattern rules run on each variant of the text (see `secretVariants`), with no case folding. The env-value rule is not a pattern and is handled in `envValueMatches`. */
 const PATTERN_RULES: readonly PatternRule[] = [
 	{
 		name: "private-key-block",
@@ -215,6 +216,7 @@ function occurrences(haystack: string, needle: string): number[] {
 
 const WORD_CHAR = /[A-Za-z0-9_]/;
 const PATH_WORD_CHAR = /[A-Za-z0-9_-]/;
+const PATH_LEADING_CHAR = /[A-Za-z0-9_.~-]/;
 
 function hasBoundaries(text: string, start: number, end: number): boolean {
 	const before = start > 0 ? text.charAt(start - 1) : "";
@@ -258,6 +260,11 @@ function endsAtPathBoundary(text: string, end: number): boolean {
 	return true;
 }
 
+/** A directory hit starts at a path boundary: start of text, or a character that does not continue a path word (a "/" before is fine). */
+function startsAtPathBoundary(text: string, start: number): boolean {
+	return start === 0 || !PATH_LEADING_CHAR.test(text.charAt(start - 1));
+}
+
 /** The entry without its trailing slashes; a non-empty entry made only of slashes becomes "/", and an empty one stays empty. */
 function withoutTrailingSlashes(entry: string): string {
 	const trimmed = entry.replace(/\/+$/, "");
@@ -273,12 +280,15 @@ function directoryHits(
 ): void {
 	for (const given of new Set(entries)) {
 		const entry = withoutTrailingSlashes(given);
-		if (entry === "") continue;
+		// The root alone would match every "/" of every URL: it is ignored.
+		if (entry === "" || entry === "/") continue;
 		pushHits(
 			hits,
 			kind,
-			occurrences(text, entry).filter((start) =>
-				endsAtPathBoundary(text, start + entry.length),
+			occurrences(text, entry).filter(
+				(start) =>
+					startsAtPathBoundary(text, start) &&
+					endsAtPathBoundary(text, start + entry.length),
 			),
 			entry.length,
 			fix,
@@ -309,6 +319,17 @@ function nameHits(
 	}
 }
 
+const HOST_CHAR = /[a-z0-9._-]/;
+
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Entries are canonical "host/path". A remote is found as the host (not the tail
+ * of a longer host), an optional ":port", then "/", ":" or ":/", then the path:
+ * so URL forms with a port and scp forms with or without a leading slash all match.
+ */
 function remoteHits(
 	lowerText: string,
 	entries: readonly string[],
@@ -316,18 +337,29 @@ function remoteHits(
 ): void {
 	for (const entry of new Set(entries)) {
 		if (entry === "") continue;
-		const forms = new Set([entry]);
-		const slash = entry.indexOf("/");
-		if (slash !== -1) {
-			forms.add(`${entry.slice(0, slash)}:${entry.slice(slash + 1)}`);
-		}
-		for (const form of forms) {
+		const lowerEntry = lowerKeepingLength(entry);
+		const slash = lowerEntry.indexOf("/");
+		if (slash === -1) {
 			pushHits(
 				hits,
 				"private-remote",
-				occurrences(lowerText, lowerKeepingLength(form)),
-				form.length,
+				occurrences(lowerText, lowerEntry),
+				entry.length,
 			);
+			continue;
+		}
+		const host = escapeRegExp(lowerEntry.slice(0, slash));
+		const path = escapeRegExp(lowerEntry.slice(slash + 1));
+		const pattern = new RegExp(`${host}(?::[0-9]+)?(?:/|:/|:)${path}`, "g");
+		for (
+			let match = pattern.exec(lowerText);
+			match !== null;
+			match = pattern.exec(lowerText)
+		) {
+			pattern.lastIndex = match.index + 1;
+			if (match.index > 0 && HOST_CHAR.test(lowerText.charAt(match.index - 1)))
+				continue;
+			pushHits(hits, "private-remote", [match.index], match[0].length);
 		}
 	}
 }
@@ -387,14 +419,22 @@ function contextFindings(text: string, context: ScanContext): ContextFinding[] {
 	return [...located, ...unlocated];
 }
 
+/** The text as it is, without forbidden characters, and that again in NFKC: a secret hidden by look-alike or invisible characters shows in one of them. */
+function secretVariants(text: string): string[] {
+	const stripped = stripForbidden(text);
+	return [...new Set([text, stripped, stripped.normalize("NFKC")])];
+}
+
 export function scanOutgoing(text: string, context: ScanContext): ScanOutcome {
 	const rules = new Set<string>();
-	for (const rule of PATTERN_RULES) {
-		if (rule.patterns.some((pattern) => pattern.test(text))) {
-			rules.add(rule.name);
+	for (const variant of secretVariants(text)) {
+		for (const rule of PATTERN_RULES) {
+			if (rule.patterns.some((pattern) => pattern.test(variant))) {
+				rules.add(rule.name);
+			}
 		}
+		if (envValueMatches(variant, context.env)) rules.add(ENV_VALUE_RULE);
 	}
-	if (envValueMatches(text, context.env)) rules.add(ENV_VALUE_RULE);
 	if (rules.size > 0) return { outcome: "secret", rules: [...rules].sort() };
 
 	const findings = contextFindings(text, context);

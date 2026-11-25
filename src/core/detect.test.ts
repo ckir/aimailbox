@@ -420,19 +420,16 @@ test("go: two majors of one module give both", () => {
 		"v2.3.0",
 	]);
 });
-test("go: replace, exclude, retract and toolchain directives are ignored", () => {
+test("go: exclude, retract and toolchain directives are ignored", () => {
 	const files = [
 		goMod(
 			"module example.com/m",
 			"go 1.21",
 			"toolchain go1.22.1",
-			"replace rsc.io/quote v1.5.2 => rsc.io/quote v1.9.9",
-			"replace rsc.io/quote => ../quote",
+			"require rsc.io/quote v1.5.2",
+			"replace example.com/other => ../other",
 			"exclude rsc.io/quote v1.5.1",
 			"retract v1.0.0",
-			"replace (",
-			"\trsc.io/quote v1.5.0 => rsc.io/quote v1.5.3",
-			")",
 			"exclude (",
 			"\trsc.io/quote v1.5.4",
 			")",
@@ -442,7 +439,7 @@ test("go: replace, exclude, retract and toolchain directives are ignored", () =>
 			")",
 		),
 	];
-	expect(recordedVersions("go/rsc.io/quote", files)).toEqual([]);
+	expect(recordedVersions("go/rsc.io/quote", files)).toEqual(["v1.5.2"]);
 });
 test("go: a pseudo-version is accepted as recorded", () => {
 	const files = [
@@ -841,4 +838,103 @@ test("cargo: a multi-line string opened outside a package block hides its lines"
 	expect(
 		recordedVersions("cargo/serde", [{ name: "Cargo.lock", text: only }]),
 	).toEqual([]);
+});
+
+// ---- npm alias (12.4: the version the file records for that box)
+test("npm: an alias entry is attributed to the package it names, not to its key", () => {
+	const files = [
+		npmLock({
+			"node_modules/lodash": entry("4.17.21", { name: "lodash-es" }),
+		}),
+	];
+	expect(recordedVersions("npm/lodash-es", files)).toEqual(["4.17.21"]);
+	expect(recordedVersions("npm/lodash", files)).toEqual([]);
+	expect<unknown>(detectInstalled("npm/lodash", undefined, files)).toEqual({
+		ok: true,
+		value: undefined,
+	});
+	expect<unknown>(detectInstalled("npm/lodash-es", undefined, files)).toEqual({
+		ok: true,
+		value: "4.17.21",
+	});
+});
+test("npm: an entry without a name uses its key, and a name that is not a string is ignored", () => {
+	const files = [
+		npmLock({
+			"node_modules/left-pad": entry("1.3.0"),
+			"node_modules/pad-left": entry("2.0.0", { name: 7 }),
+			"node_modules/pad": entry("3.0.0", { name: null }),
+		}),
+	];
+	expect(recordedVersions("npm/left-pad", files)).toEqual(["1.3.0"]);
+	expect(recordedVersions("npm/pad-left", files)).toEqual(["2.0.0"]);
+	expect(recordedVersions("npm/pad", files)).toEqual(["3.0.0"]);
+});
+
+// ---- go replace (12.4: fail closed)
+const GO_REQUIRE = "require github.com/a/b v1.5.0";
+test("go: a single-line replace of the module by another module makes the version unknown", () => {
+	for (const replace of [
+		"replace github.com/a/b => github.com/fork/b v1.2.0",
+		"replace github.com/a/b v1.5.0 => github.com/fork/b v1.2.0",
+	]) {
+		const files = [goMod(GO_REQUIRE, replace)];
+		expect(recordedVersions("go/github.com/a/b", files)).toEqual([]);
+		expect<unknown>(
+			detectInstalled("go/github.com/a/b", undefined, files),
+		).toEqual({ ok: true, value: undefined });
+	}
+});
+test("go: a replace by a local directory makes the version unknown", () => {
+	for (const replace of [
+		"replace github.com/a/b => ../b",
+		"replace github.com/a/b v1.5.0 => ../b",
+	]) {
+		const files = [goMod(GO_REQUIRE, replace)];
+		expect(recordedVersions("go/github.com/a/b", files)).toEqual([]);
+	}
+});
+test("go: a replace inside a block makes the version unknown, whatever its order", () => {
+	for (const block of [
+		["replace (", "\tgithub.com/a/b => github.com/fork/b v1.2.0", ")"],
+		["replace (", "\tgithub.com/a/b v1.5.0 => ../b", ")"],
+		[
+			"replace (",
+			"\texample.com/other => ../o",
+			"\tgithub.com/a/b => ../b // pinned",
+			")",
+		],
+	]) {
+		for (const lines of [
+			[GO_REQUIRE, ...block],
+			[...block, GO_REQUIRE],
+		]) {
+			expect(recordedVersions("go/github.com/a/b", [goMod(...lines)])).toEqual(
+				[],
+			);
+		}
+	}
+});
+test("go: a replace of another module changes nothing", () => {
+	const files = [
+		goMod(
+			GO_REQUIRE,
+			"replace github.com/a/bc => ../bc",
+			"replace github.com/x/b v1.0.0 => github.com/a/b v1.0.0",
+			"replace (",
+			"\texample.com/other v1.0.0 => ../o",
+			")",
+		),
+	];
+	expect(recordedVersions("go/github.com/a/b", files)).toEqual(["v1.5.0"]);
+	expect<unknown>(
+		detectInstalled("go/github.com/a/b", undefined, files),
+	).toEqual({ ok: true, value: "v1.5.0" });
+});
+test("go: a replace of the box in one go.mod gives no versions, another file still counts", () => {
+	const files = [
+		goMod(GO_REQUIRE, "replace github.com/a/b => ../b"),
+		goMod("require github.com/a/b v1.6.0"),
+	];
+	expect(recordedVersions("go/github.com/a/b", files)).toEqual(["v1.6.0"]);
 });

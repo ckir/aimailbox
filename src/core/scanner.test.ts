@@ -463,6 +463,53 @@ describe("scanOutgoing context", () => {
 		});
 	});
 
+	test("a private remote is found with a port, with host:/path and in any case", () => {
+		const ctx = context({
+			privateRemotes: ["git.corp.example/team/secret-repo"],
+		});
+		for (const remote of [
+			"ssh://git@git.corp.example:2222/team/secret-repo.git",
+			"https://git.corp.example:8443/team/secret-repo",
+			"git@git.corp.example:/team/secret-repo.git",
+			"git@git.corp.example:team/secret-repo.git",
+			"https://git.corp.example/team/secret-repo",
+			"https://GIT.Corp.Example:443/Team/Secret-Repo.git",
+		]) {
+			const text = `clone ${remote} now`;
+			const result = scanOutgoing(text, ctx);
+			if (result.outcome !== "context") throw new Error(`not context: ${text}`);
+			expect(result.findings).toHaveLength(1);
+			const finding = result.findings[0];
+			expect(finding?.kind).toBe("private-remote");
+			expect(finding?.fix).toBeUndefined();
+			const span = finding?.span;
+			if (span === null || span === undefined) throw new Error("no span");
+			expect(text.slice(span.start, span.end).toLowerCase()).toStartWith(
+				"git.corp.example",
+			);
+			expect(text.slice(span.start, span.end).toLowerCase()).toContain(
+				"team/secret-repo",
+			);
+		}
+	});
+
+	test("a longer host that contains the remote's host is not a private remote", () => {
+		const ctx = context({
+			privateRemotes: ["git.corp.example/team/secret-repo"],
+		});
+		for (const text of [
+			"clone xgit.corp.example/team/secret-repo",
+			"clone https://xgit.corp.example:2222/team/secret-repo",
+			"clone git.corp.example.evil/team/secret-repo",
+			"clone git@git.corp.example.evil:team/secret-repo",
+			"clone sub.git.corp.example/team/secret-repo",
+			"clone git.corp.example:abc/team/secret-repo",
+			"clone git.corp.example/team/other-repo",
+		]) {
+			expect<unknown>(scanOutgoing(text, ctx)).toEqual({ outcome: "clean" });
+		}
+	});
+
 	test("findings are sorted and do not overlap", () => {
 		const text =
 			"alice ran /home/u/app/x on box7 for github.com/me/private, again /home/u";
@@ -562,22 +609,58 @@ describe("scanOutgoing context", () => {
 		});
 	});
 
-	test("the entry / alone matches a slash followed by a boundary", () => {
-		const root = context({ homeDirs: ["/"] });
-		expect<unknown>(scanOutgoing("see /home/u", root)).toEqual({
-			outcome: "clean",
-		});
-		expect<unknown>(scanOutgoing("the root / is full", root)).toEqual({
-			outcome: "context",
-			findings: [{ kind: "home-dir", span: { start: 9, end: 10 }, fix: "~" }],
-		});
-		// slashes only: the same entry
+	test("a directory entry that is only slashes is ignored", () => {
+		for (const entry of ["/", "//", "///"]) {
+			for (const ctx of [
+				context({ homeDirs: [entry] }),
+				context({ workDirs: [entry] }),
+			]) {
+				for (const text of [
+					"see /home/u",
+					"the root / is full",
+					"see https://example.com/a",
+				]) {
+					expect<unknown>(scanOutgoing(text, ctx)).toEqual({
+						outcome: "clean",
+					});
+				}
+			}
+		}
+		// another entry beside it still works
 		expect<unknown>(
-			scanOutgoing("the root / is full", context({ homeDirs: ["//"] })),
+			scanOutgoing(
+				"see /home/u/x",
+				context({ homeDirs: ["/", "/home/u"], workDirs: ["/"] }),
+			),
 		).toEqual({
 			outcome: "context",
-			findings: [{ kind: "home-dir", span: { start: 9, end: 10 }, fix: "~" }],
+			findings: [{ kind: "home-dir", span: { start: 4, end: 11 }, fix: "~" }],
 		});
+	});
+
+	test("a directory hit needs a path boundary before it", () => {
+		const ctx = context({ homeDirs: ["/home/u"] });
+		expect<unknown>(
+			scanOutgoing("copied from /mnt/backup/home/u/notes.txt", ctx),
+		).toEqual({ outcome: "clean" });
+		for (const before of ["a", "Z", "0", "_", ".", "~", "-"]) {
+			expect<unknown>(scanOutgoing(`x${before}/home/u/y`, ctx)).toEqual({
+				outcome: "clean",
+			});
+		}
+		const found = (text: string, start: number) =>
+			expect<unknown>(scanOutgoing(text, ctx)).toEqual({
+				outcome: "context",
+				findings: [
+					{ kind: "home-dir", span: { start, end: start + 7 }, fix: "~" },
+				],
+			});
+		found("/home/u", 0);
+		found("see /home/u/x", 4);
+		found('"/home/u"', 1);
+		found("(/home/u)", 1);
+		found("file:///home/u/x", 7);
+		found("cd\n/home/u", 3);
 	});
 
 	test("a hit that reaches past a kept finding takes its fix away", () => {
@@ -706,5 +789,115 @@ describe("applyFixes and isMechanical", () => {
 	test("an empty list is mechanical and changes nothing", () => {
 		expect(isMechanical([])).toBe(true);
 		expect(applyFixes("unchanged", [])).toBe("unchanged");
+	});
+});
+
+describe("a secret hidden behind look-alike or invisible characters", () => {
+	const ZWSP = String.fromCharCode(0x200b);
+	/** Each printable ASCII character written as its fullwidth form (U+FF01 plus the offset from "!"). */
+	function fullwidth(text: string): string {
+		return [...text]
+			.map((char) => String.fromCodePoint((char.codePointAt(0) ?? 0) + 0xfee0))
+			.join("");
+	}
+	/** Every 8-character window of every variant of the secret must be absent from the result. */
+	function expectNoEightCharacters(result: unknown, secret: string) {
+		const json = JSON.stringify(result);
+		for (const variant of [
+			secret,
+			secret.replaceAll(ZWSP, ""),
+			secret.replaceAll(ZWSP, "").normalize("NFKC"),
+		]) {
+			for (let at = 0; at + 8 <= variant.length; at += 1) {
+				expect(json).not.toContain(variant.slice(at, at + 8));
+			}
+		}
+	}
+
+	test("a fullwidth token is a secret", () => {
+		const token = fakeSecret("github-token");
+		const written = fullwidth(token);
+		expect(written).not.toBe(token);
+		const result = scanOutgoing(`I pasted ${written} here`, EMPTY);
+		expect<unknown>(result).toEqual({
+			outcome: "secret",
+			rules: ["github-token"],
+		});
+		expectNoEightCharacters(result, written);
+		expectNoEightCharacters(result, token);
+	});
+
+	test("a token with a zero-width space after its prefix is a secret", () => {
+		const token = fakeSecret("github-token");
+		const written = `${token.slice(0, 4)}${ZWSP}${token.slice(4)}`;
+		expect(written).toContain(ZWSP);
+		const result = scanOutgoing(`I pasted ${written} here`, EMPTY);
+		expect<unknown>(result).toEqual({
+			outcome: "secret",
+			rules: ["github-token"],
+		});
+		expectNoEightCharacters(result, written);
+	});
+
+	test("a fullwidth token with a zero-width space is a secret", () => {
+		const token = fakeSecret("github-token");
+		const written = `${fullwidth(token.slice(0, 4))}${ZWSP}${fullwidth(token.slice(4))}`;
+		expect<unknown>(scanOutgoing(`I pasted ${written} here`, EMPTY)).toEqual({
+			outcome: "secret",
+			rules: ["github-token"],
+		});
+	});
+
+	test("an env value written fullwidth is an env-value secret", () => {
+		const value = randomAlnum(20);
+		const result = scanOutgoing(
+			`it printed ${fullwidth(value)} to the log`,
+			context({ env: [{ name: "DEPLOY_TOKEN", value }] }),
+		);
+		expect<unknown>(result).toEqual({
+			outcome: "secret",
+			rules: ["env-value"],
+		});
+		expectNoEightCharacters(result, fullwidth(value));
+		expectNoEightCharacters(result, value);
+	});
+
+	test("an env value split by a zero-width space is an env-value secret", () => {
+		const value = randomAlnum(20);
+		const written = `${value.slice(0, 7)}${ZWSP}${value.slice(7)}`;
+		expect<unknown>(
+			scanOutgoing(
+				`it printed ${written} to the log`,
+				context({ env: [{ name: "DEPLOY_TOKEN", value }] }),
+			),
+		).toEqual({ outcome: "secret", rules: ["env-value"] });
+	});
+
+	test("the near-miss written fullwidth or with a zero-width space stays clean", () => {
+		const nearMiss = `${"gh" + "p_"}${randomAlnum(10)}`;
+		for (const written of [
+			nearMiss,
+			fullwidth(nearMiss),
+			`${nearMiss.slice(0, 4)}${ZWSP}${nearMiss.slice(4)}`,
+		]) {
+			expect<unknown>(scanOutgoing(`I pasted ${written} here`, EMPTY)).toEqual({
+				outcome: "clean",
+			});
+		}
+	});
+
+	test("input that does not conform is scanned, not refused", () => {
+		const text = `bell\u0007 and ${ZWSP} and \r\n`;
+		expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+	});
+
+	test("context findings and spans stay on the raw text", () => {
+		const text = `${ZWSP}see /home/u/x`;
+		expect<unknown>(
+			scanOutgoing(text, context({ homeDirs: ["/home/u"] })),
+		).toEqual({
+			outcome: "context",
+			findings: [{ kind: "home-dir", span: { start: 5, end: 12 }, fix: "~" }],
+		});
 	});
 });

@@ -52,9 +52,12 @@ function npmVersions(address: string, text: string): string[] {
 	if (!isRecord(packages)) return [];
 	const found: string[] = [];
 	for (const [key, value] of Object.entries(packages)) {
-		const name = npmNameOfKey(key);
-		if (name === undefined || `npm/${name}` !== address) continue;
-		if (!isRecord(value)) continue;
+		const keyName = npmNameOfKey(key);
+		if (keyName === undefined || !isRecord(value)) continue;
+		// An alias ("lodash": "npm:lodash-es@4") sits under the alias key and carries
+		// the real package name: the entry records a version for that package.
+		const name = ownString(value, "name") ?? keyName;
+		if (`npm/${name}` !== address) continue;
 		if (Object.hasOwn(value, "link") && value.link === true) continue;
 		const version = ownString(value, "version");
 		if (version !== undefined) found.push(version);
@@ -120,6 +123,8 @@ function cargoVersions(address: string, text: string): string[] {
 const GO_BLOCK_OPEN = /^([A-Za-z]+)\s*\(\s*$/;
 const GO_REQUIRE_LINE = /^require\s+(\S+)\s+(\S+)$/;
 const GO_BLOCK_LINE = /^(\S+)\s+(\S+)$/;
+const GO_REPLACE_LINE = /^replace\s+(\S+)(?:\s+\S+)?\s*=>/;
+const GO_REPLACE_BLOCK_LINE = /^(\S+)(?:\s+\S+)?\s*=>/;
 
 function goComment(line: string): string {
 	const comment = line.indexOf("//");
@@ -127,9 +132,17 @@ function goComment(line: string): string {
 }
 
 // A block or directive that is not closed means a file the go tool itself
-// would refuse: it is not understood, so it gives no versions.
+// would refuse: it is not understood, so it gives no versions. A replace of the
+// module itself (by another module or a local directory) means the code in use
+// is not the required version: fail closed, no versions.
 function goVersions(address: string, text: string): string[] {
 	const found: string[] = [];
+	let replaced = false;
+	const replace = (path: string | undefined) => {
+		if (path === undefined) return;
+		const canonical = canonicalise(`go/${path}`);
+		if (canonical.ok && canonical.value === address) replaced = true;
+	};
 	const add = (path: string | undefined, version: string | undefined) => {
 		if (path === undefined || version === undefined) return;
 		const canonical = canonicalise(`go/${path}`);
@@ -144,6 +157,8 @@ function goVersions(address: string, text: string): string[] {
 			} else if (block === "require") {
 				const match = GO_BLOCK_LINE.exec(line);
 				add(match?.[1], match?.[2]);
+			} else if (block === "replace") {
+				replace(GO_REPLACE_BLOCK_LINE.exec(line)?.[1]);
 			}
 			continue;
 		}
@@ -154,8 +169,9 @@ function goVersions(address: string, text: string): string[] {
 		}
 		const single = GO_REQUIRE_LINE.exec(line);
 		if (single !== null) add(single[1], single[2]);
+		replace(GO_REPLACE_LINE.exec(line)?.[1]);
 	}
-	return block === undefined ? found : [];
+	return block === undefined && !replaced ? found : [];
 }
 
 /** Every exact version the given files record for this box, in file order; [] when none or when a file is not understood. */

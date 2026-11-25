@@ -1,11 +1,13 @@
+import { isCanonical } from "./address.ts";
 import type { Entry } from "./entry.ts";
 import { LIMITS, WARNING_TAGS } from "./limits.ts";
 import type { LookupGroup } from "./lookup.ts";
 import type { Mark } from "./mark.ts";
 import type { Result } from "./result.ts";
+import { computeTags } from "./tags.ts";
 import { cutToBytes, cutToCodePoints, utf8Length } from "./text.ts";
 
-export type EnvelopeError = "bad-boundary" | "boundary-in-text";
+export type EnvelopeError = "bad-boundary" | "boundary-in-text" | "bad-address";
 
 const BOUNDARY = /^[0-9a-f]{32,64}$/;
 const CUT_NOTICE = "[cut: over the size cap]";
@@ -67,7 +69,16 @@ export function renderSummaryLine(entry: Entry, mark: Mark): string {
 			entry.kind === "problem" ? entry.reportedVersion : entry.version;
 		if (reported !== undefined) fields.push(`reported=${reported}`);
 	}
-	const tags = WARNING_TAGS.filter((tag) => entry.warningTags.includes(tag));
+	// 7.4: the client computes its own tags and accepts only known ones from the
+	// service, so the line shows the union, each tag once, in vocabulary order.
+	const ownTags = computeTags(
+		entry.kind === "problem" && entry.failureSignature !== undefined
+			? `${entry.summary}\n${entry.failureSignature}`
+			: entry.summary,
+	);
+	const tags = WARNING_TAGS.filter(
+		(tag) => entry.warningTags.includes(tag) || ownTags.includes(tag),
+	);
 	if (tags.length > 0) fields.push(`warn=${tags.join(",")}`);
 
 	const prefix = `${fields.join(" ")}${SEPARATOR}`;
@@ -92,6 +103,8 @@ export function renderLookup(
 	group: LookupGroup,
 	options: RenderOptions,
 ): Result<string, EnvelopeError> {
+	// The address is printed outside the untrusted block, so it must be canonical.
+	if (!isCanonical(options.address)) return { ok: false, error: "bad-address" };
 	const lines =
 		group.shown.length === 0
 			? ["(no entries)"]

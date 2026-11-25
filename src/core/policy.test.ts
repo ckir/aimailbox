@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { canonicalise } from "./address.ts";
 import {
 	type Call,
+	canonicalRemote,
 	DEFAULT_POLICY,
 	type Permission,
 	type Policy,
@@ -540,5 +541,46 @@ describe("policyPermission", () => {
 			expect(policyPermission(resolution, "retraction")).toBe("yes");
 			expect(policyPermission(resolution, "other")).toBe("no");
 		}
+	});
+});
+
+describe("canonicalRemote", () => {
+	test("the four forms of one remote give the same host/path", () => {
+		for (const form of [
+			"https://github.com/me/repo.git",
+			"git@github.com:me/repo.git",
+			"ssh://git@github.com/me/repo",
+			"github.com/me/repo",
+		]) {
+			expect(canonicalRemote(form)).toBe("github.com/me/repo");
+		}
+	});
+
+	test("a string that is not a remote gives undefined", () => {
+		expect(canonicalRemote("not a remote")).toBeUndefined();
+	});
+});
+
+describe("an unparsable remote beside a matching allow remote", () => {
+	test("resolves to confirm-each and nothing unattended", () => {
+		const rules: PolicyEntry[] = [
+			{ remote: "github.com/me/repo", mode: "allow" },
+		];
+		const resolved = resolvePolicy(
+			policy(rules, "allow", true),
+			call({ remotes: ["github.com/me/repo", "not a remote"] }),
+		);
+		expect<unknown>(resolved).toEqual({
+			mode: "confirm-each",
+			vetoed: false,
+			unattendedPostRead: false,
+		});
+		// the same call without the unparsable remote is allowed and unattended
+		expect<unknown>(
+			resolvePolicy(
+				policy(rules, "allow", true),
+				call({ remotes: ["github.com/me/repo"] }),
+			),
+		).toEqual({ mode: "allow", vetoed: false, unattendedPostRead: true });
 	});
 });

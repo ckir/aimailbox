@@ -65,10 +65,10 @@ function readDirectory(value: unknown): string | undefined {
 	return `/${body}`;
 }
 
-// The stored form of a remote is the canonical "host/path", without the "tool/" prefix.
-function canonicalRemote(value: unknown): string | undefined {
-	if (typeof value !== "string") return undefined;
-	const canonical = canonicalise(TOOL_PREFIX + value);
+/** The canonical "host/path" form of a git remote (without the "tool/" prefix of an address), or undefined when canonicalise refuses it. */
+export function canonicalRemote(remote: string): string | undefined {
+	if (typeof remote !== "string") return undefined;
+	const canonical = canonicalise(TOOL_PREFIX + remote);
 	if (!canonical.ok || !canonical.value.startsWith(TOOL_PREFIX))
 		return undefined;
 	return canonical.value.slice(TOOL_PREFIX.length);
@@ -93,7 +93,8 @@ function readEntry(value: unknown): PolicyEntry | undefined {
 		if (dir === undefined) return undefined;
 		entry = { directory: dir, mode };
 	} else {
-		const rem = canonicalRemote(remote);
+		const rem =
+			typeof remote === "string" ? canonicalRemote(remote) : undefined;
 		if (rem === undefined) return undefined;
 		entry = { remote: rem, mode };
 	}
