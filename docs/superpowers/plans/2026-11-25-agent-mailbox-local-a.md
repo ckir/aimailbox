@@ -688,6 +688,21 @@ Final whole-branch review: R14, a private remote is matched as host, optional `:
 
 Contracts that plan 2b must meet, found by the reviews and not fixable here: rule directories and the call directory must both be resolved (real path, the file system's case rule) before `resolvePolicy`, because the policy compares them as given; entries the client builds from its local store must be cleaned before they are rendered; the client passes only validated canonical addresses and a `nextGroupCommand` built from trusted parts; the scanner needs `privateRemotes` in `host/path` form (use `canonicalRemote`) and must not be given `/` as a work directory.
 
+Capstone rounds 1 to 6 (an adversarial peer reading the committed code; every finding measured before it was folded). The scanner is a heuristic filter, so each round found more credential forms in new families; the fresh-corpus leak rate went from 8 of 30 (round 5) to 4 of 30 (round 6) with 0 of 30 ordinary sentences wrongly refused, and the last fold (R41 to R43) was not reviewed by a further round. The rulings, all built and tested in `scanner.ts` and `detect.ts`:
+
+- R21, R27: the `bearer-header` schemes are bearer, basic, token, digest, apikey, api-key, negotiate and ntlm after `authorization` or `proxy-authorization`.
+- R22, R26, R30: a colon-less URL userinfo of 20 or more characters of `[A-Za-z0-9._~%+=-]` is a secret, and the user part before the colon may be empty (`redis://:pass@host`).
+- R23: a quoted value of 12 or more characters, spaces allowed, after a secret keyword is a secret. This refuses ordinary quoted prose such as `password: "see the docs for the rules"` by design: a refusal saves nothing and leaks nothing.
+- R24: `_` is not a host character in the private-remote boundary.
+- R25: go.mod module paths may be quoted with double quotes or back-quotes, so a quoted `replace` is seen.
+- R28, R31, R41: the secret-assignment keywords also cover `passphrase`, `credential(s)`, `account_key`, `sas_token`, `shared_access_key` and `secret_key`; bare `auth` is deliberately not a keyword.
+- R29, R33, R34, R37: a `cookie-header` rule for `Cookie` and `Set-Cookie` lines with a 16-character value, skipping the standard attribute names, looking at every pair, with the gap bounded at 2000 characters so the scan stays linear.
+- R31: a `docker-auth` rule for `"auth": "<base64>"`; R32, R40, R42: prefixed-key patterns for SendGrid, Stripe restricted, GitLab, PyPI, HuggingFace, DigitalOcean, Shopify, Google OAuth `ya29.`, age and Vault.
+- R35, R36: `~` is not a path character at a directory boundary, and each directory entry is also matched in percent-encoded form (a located finding with no fix).
+- R38, R43: a `cli-credentials` rule for `curl -u user:pass`, `sshpass -p`, `--password`-style flags, `mysql -p<pass>`, `aws configure set` and `docker login -p`; R39: a `webhook-url` rule for Slack, Discord and Teams webhook URLs.
+
+The stated boundary of the scanner, for the owner to accept in `docs/accepted-boundaries.md`: it is a best-effort structural heuristic that intercepts standard forms of secrets (private-key blocks, known key prefixes, authorization headers, URL userinfo, keyword assignments, the CLI and webhook forms above); it does not detect an unanchored high-entropy value, a proprietary token with no known prefix, or a credential in a positional argument of a tool it has no rule for. Outbound safety also rests on the policy default of deny and on the human's confirmation (8.4, 8.5).
+
 ## Self-review (run 2026-11-25)
 
 - **Spec coverage.** 7.1 default-ignorable: Task 1. 7.2, 7.3 envelope and rendered summaries: Task 5. 7.4 tags: Task 2. 8.1 scanner: Task 3. 8.4 policy file, scoped rules, veto, retraction exception: Task 4. 12.4 rule 4 installed version: Task 6. 12.3 invalid version has no row: Task 7. Not in 2a by design, and where they go: the draft lock (8.2), the local store (9.6), the veto file reading, the read record, lookup and send over local notes, the printed allow command, the command surface (2b); setup, uninstall, the always-on rule, dogfood (2c); the read-state rules of 8.3, the confirmation (8.5), the gate (9.2): plan 5.
