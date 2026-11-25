@@ -197,3 +197,29 @@ test("rows with odd versions come out the same in any vote order", () => {
 		).toEqual(a);
 	}
 });
+test("a vote whose version is invalid as written makes no row, in either vote order", () => {
+	const x = "x".repeat(64);
+	const orders = [
+		[c(`v${x}`, 1), c(x, 2)],
+		[c(x, 2), c(`v${x}`, 1)],
+	];
+	const results = orders.map((votes) => deriveStatus("tool", votes));
+	for (const result of results) {
+		expect(result.rows).toEqual([
+			{
+				version: x,
+				confirmTotal: 1,
+				confirmNonBurst: 1,
+				doesNotReproduceTotal: 0,
+				doesNotReproduceNonBurst: 0,
+			},
+		]);
+		expect(result.confirm.total).toBe(2);
+	}
+	expect(results[0]?.rows).toEqual(results[1]?.rows);
+});
+test("an invalid-version vote still counts in the totals", () => {
+	const result = deriveStatus("tool", [c("x".repeat(65), 1)]);
+	expect(result.rows).toEqual([]);
+	expect(result.confirm.total).toBe(1);
+});
