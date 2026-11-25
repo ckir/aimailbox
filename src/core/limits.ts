@@ -31,5 +31,5 @@ export const LIMITS = {
 	scanEntropyBitsPerChar: 3.5, // [PROPOSED, UNMEASURED] Shannon entropy per character at or above which a value counts as random
 	scanContextNameMinChars: 3, // [PROPOSED, UNMEASURED] shortest user, host, branch or package name the scanner looks for
 	envelopeBytes: 16384, // [PROPOSED, UNMEASURED] hard cap (7.3) on the text inside one untrusted block
-	summaryLineBytes: 400, // [PROPOSED, UNMEASURED] strict cap (12.3) on one rendered summary line
+	summaryLineBytes: 1024, // [PROPOSED, UNMEASURED] strict cap (12.3) on one rendered summary line; covers the worst validated prefix plus a 120-code-point summary of 4-byte characters
 } as const;

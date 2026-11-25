@@ -115,11 +115,14 @@ export function renderLookup(
 	}
 	const unknown = group.unknownFormat;
 	if (unknown.count > 0) {
+		const lead = `${unknown.count} ${unknown.count === 1 ? "entry needs" : "entries need"} a newer client`;
 		const listed = unknown.noteNumbers.map((n) => `#${n}`);
-		if (unknown.count > unknown.noteNumbers.length) listed.push("and others");
-		out.push(
-			`${unknown.count} entries need a newer client: ${listed.join(", ")}`,
-		);
+		if (listed.length === 0) {
+			out.push(lead);
+		} else {
+			if (unknown.count > listed.length) listed.push("and others");
+			out.push(`${lead}: ${listed.join(", ")}`);
+		}
 	}
 	return { ok: true, value: out.join("\n") };
 }

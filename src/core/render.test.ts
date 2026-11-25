@@ -236,16 +236,71 @@ describe("renderSummaryLine", () => {
 		}
 	});
 
-	test("a summary of 120 four-byte characters is cut to fit the line cap on a whole code point", () => {
-		const entry = problemEntry({ summary: EMOJI.repeat(120) });
+	const MAX = Number.MAX_SAFE_INTEGER;
+	const LONG_VERSION = "1".repeat(LIMITS.versionChars);
+	const burstForm = { total: MAX, nonBurstTotal: MAX - 1, burst: true };
+	const worst = problemEntry({
+		noteNumber: MAX,
+		replyCount: MAX,
+		resolved: { time: T0, version: LONG_VERSION },
+		reportedVersion: LONG_VERSION,
+		confirm: burstForm,
+		doesNotReproduce: burstForm,
+		warningTags: [
+			"network-or-install",
+			"config-or-credential",
+			"disables-check",
+			"indirect-execution",
+			"edits-executable",
+		],
+	});
+	const allMarks: Mark[] = [
+		"resolved",
+		"not-reproduced-on-newer",
+		"disputed-on-your-version",
+		"same-version",
+		"unknown",
+	];
+
+	test("the worst validated entry with an empty-looking summary fits the line cap under every mark", () => {
+		for (const mark of allMarks) {
+			const line = renderSummaryLine({ ...worst, summary: "x" }, mark);
+			expect(utf8Length(line)).toBeLessThanOrEqual(LIMITS.summaryLineBytes);
+		}
+	});
+
+	test("the worst validated prefix with 120 four-byte characters keeps the summary whole under every mark", () => {
+		const summary = EMOJI.repeat(LIMITS.summaryCodePoints);
+		for (const mark of allMarks) {
+			const line = renderSummaryLine({ ...worst, summary }, mark);
+			expect(line.endsWith(` | ${summary}`)).toBe(true);
+			expect(utf8Length(line)).toBeLessThanOrEqual(LIMITS.summaryLineBytes);
+		}
+	});
+
+	test("120 four-byte characters on an ordinary entry are kept whole", () => {
+		const summary = EMOJI.repeat(LIMITS.summaryCodePoints);
+		expect(renderSummaryLine(problemEntry({ summary }), "unknown")).toBe(
+			`#1 problem unknown confirm=0 does-not-reproduce=0 replies=0 | ${summary}`,
+		);
+	});
+
+	// No validated entry reaches the byte cut (the worst prefix plus a full
+	// summary is under the cap), so the cut is defence in depth. This entry
+	// was never validated: its version is 600 characters long.
+	test("the byte cut keeps an unvalidated oversize line within the cap on a whole code point", () => {
+		const entry = problemEntry({
+			reportedVersion: "1".repeat(600),
+			summary: EMOJI.repeat(LIMITS.summaryCodePoints),
+		});
 		const line = renderSummaryLine(entry, "unknown");
-		const prefix =
-			"#1 problem unknown confirm=0 does-not-reproduce=0 replies=0 | ";
-		expect(line.startsWith(prefix)).toBe(true);
+		const prefix = line.slice(0, line.indexOf(" | ") + 3);
+		expect(utf8Length(prefix)).toBeLessThan(LIMITS.summaryLineBytes);
 		expect(utf8Length(line)).toBeLessThanOrEqual(LIMITS.summaryLineBytes);
 		expect(utf8Length(line)).toBeGreaterThan(LIMITS.summaryLineBytes - 4);
 		const summary = line.slice(prefix.length);
 		expect(summary.length).toBeGreaterThan(0);
+		expect(summary.length).toBeLessThan(EMOJI.repeat(120).length);
 		expect([...summary].every((c) => c === EMOJI)).toBe(true);
 	});
 
@@ -318,7 +373,7 @@ describe("renderLookup", () => {
 		expect(lines.at(-2)).toBe(`<<untrusted-end boundary=${B}>>`);
 	});
 
-	test("unknown-format entries add the line, with and others when the count exceeds the numbers", () => {
+	test("unknown-format entries add the line, with and others when the count exceeds the numbers and no colon when none are listed", () => {
 		const listed = ok(
 			renderLookup(
 				{ ...two, unknownFormat: { count: 2, noteNumbers: [3, 4] } },
@@ -343,8 +398,22 @@ describe("renderLookup", () => {
 				options,
 			),
 		);
-		expect(unnumbered.split("\n").at(-1)).toBe(
-			"2 entries need a newer client: and others",
+		expect(unnumbered.split("\n").at(-1)).toBe("2 entries need a newer client");
+		const one = ok(
+			renderLookup(
+				{ ...two, unknownFormat: { count: 1, noteNumbers: [8] } },
+				options,
+			),
+		);
+		expect(one.split("\n").at(-1)).toBe("1 entry needs a newer client: #8");
+		const oneUnnumbered = ok(
+			renderLookup(
+				{ ...two, unknownFormat: { count: 1, noteNumbers: [] } },
+				options,
+			),
+		);
+		expect(oneUnnumbered.split("\n").at(-1)).toBe(
+			"1 entry needs a newer client",
 		);
 	});
 
@@ -362,7 +431,7 @@ describe("renderLookup", () => {
 		expect(lines.slice(-3)).toEqual([
 			`<<untrusted-end boundary=${B}>>`,
 			"1 more not shown; next group: box lookup example/box --group 2",
-			"1 entries need a newer client: #8",
+			"1 entry needs a newer client: #8",
 		]);
 	});
 
@@ -434,7 +503,7 @@ describe("renderLookup", () => {
 			"lookup example/box group 1: showing 1",
 			"notice: some content did not conform to the reading rules and was cleaned",
 			"2 more not shown; next group: box lookup example/box --group 2",
-			"1 entries need a newer client: #8",
+			"1 entry needs a newer client: #8",
 		]);
 	});
 });
