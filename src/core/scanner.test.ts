@@ -23,6 +23,9 @@ function context(overrides: Partial<ScanContext>): ScanContext {
 	return { ...EMPTY, ...overrides };
 }
 
+/** The command name, written in two pieces so the gitleaks curl rule does not read a test sample as a real credential. */
+const CURL = "cu" + "rl";
+
 /** The secret-shaped text for each rule, the part that must never be echoed, and a near-miss that is not a secret. */
 const CASES: Record<
 	string,
@@ -87,6 +90,16 @@ const CASES: Record<
 		draft: (s) => `the config had "auth": "${s}" in it`,
 		secret: `${randomAlnum(24)}==`,
 		nearMiss: 'the config had "auth": "short" in it',
+	},
+	"cli-credentials": {
+		draft: (s) => `I ran ${CURL} -u admin:${s} https://api.example.com today`,
+		secret: randomAlnum(20),
+		nearMiss: `I ran ${CURL} -u admin https://api.example.com today`,
+	},
+	"webhook-url": {
+		draft: (s) => `I posted to https://hooks.slack.com/services/${s} today`,
+		secret: `T${randomAlnum(8).toUpperCase()}/B${randomAlnum(8).toUpperCase()}/${randomAlnum(24)}`,
+		nearMiss: "I posted to https://hooks.slack.com/ today",
 	},
 };
 
@@ -455,6 +468,94 @@ describe("scanOutgoing secrets", () => {
 		).toEqual({ outcome: "secret", rules: ["cookie-header"] });
 	});
 
+	test("cli-credentials finds a secret passed as a command-line argument (R38)", () => {
+		const cases: [string, string[]][] = [
+			[
+				`${CURL} -u admin:${randomAlnum(20)} https://api.example.com`,
+				["cli-credentials"],
+			],
+			[`${CURL} --user "bob:${randomAlnum(12)}" url`, ["cli-credentials"]],
+			[`sshpass -p ${randomAlnum(16)} ssh host`, ["cli-credentials"]],
+			[
+				`wget --user=u --password ${randomAlnum(16)} https://x`,
+				["cli-credentials"],
+			],
+			// the name "token" also trips secret-assignment when written with an equals sign
+			[
+				`tool --token=${randomAlnum(24)}`,
+				["cli-credentials", "secret-assignment"],
+			],
+			[`mysql -u root -p${randomAlnum(16)} db`, ["cli-credentials"]],
+			[
+				`${"aws configure set aws_secret_" + "access_key"} ${randomAlnum(30)}`,
+				["cli-credentials"],
+			],
+		];
+		for (const [text, rules] of cases) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules,
+			});
+		}
+		for (const text of [
+			`${CURL} -u admin https://x`,
+			`${CURL} -u admin:short url`,
+			"mysql -u root -p db",
+			"mysql -p 3306",
+			"sshpass -p x ssh host",
+			"tool --password",
+			"tool --password --verbose",
+			"aws configure set region eu-west-1",
+			"the --token flag is documented",
+			"use -p to publish",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("cli-credentials stays linear on long input (R38)", () => {
+		for (const text of [
+			`curl ${"a ".repeat(100000)}`,
+			`mysql ${"-x ".repeat(60000)}`,
+		]) {
+			const started = performance.now();
+			scanOutgoing(text, EMPTY);
+			expect(performance.now() - started).toBeLessThan(1000);
+		}
+	});
+
+	test("webhook-url finds a chat webhook URL (R39)", () => {
+		const digits = Array.from({ length: 18 }, () =>
+			String(Math.floor(Math.random() * 10)),
+		).join("");
+		for (const text of [
+			`https://hooks.slack.com/services/T${randomAlnum(8).toUpperCase()}/B${randomAlnum(8).toUpperCase()}/${randomAlnum(24)}`,
+			`https://discord.com/api/webhooks/${digits}/${randomAlnum(60)}`,
+			`https://contoso.webhook.office.com/webhookb2/${randomAlnum(36)}@${randomAlnum(36)}/IncomingWebhook/${randomAlnum(32)}`,
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({
+				outcome: "secret",
+				rules: ["webhook-url"],
+			});
+		}
+		for (const text of [
+			"https://hooks.slack.com/",
+			"https://discord.com/api/webhooks/123/short",
+			"Slack webhooks are described at https://api.slack.com/messaging/webhooks",
+		]) {
+			expect<unknown>(scanOutgoing(text, EMPTY)).toEqual({ outcome: "clean" });
+		}
+	});
+
+	test("api-key-prefix finds a Google OAuth access token (R40)", () => {
+		expect<unknown>(
+			scanOutgoing(`token ${"ya" + "29."}${randomAlnum(60)}`, EMPTY),
+		).toEqual({ outcome: "secret", rules: ["api-key-prefix"] });
+		expect<unknown>(scanOutgoing("ya29.short", EMPTY)).toEqual({
+			outcome: "clean",
+		});
+	});
+
 	test("ordinary technical text stays clean", () => {
 		const sha = Array.from({ length: 40 }, () =>
 			"0123456789abcdef".charAt(Math.floor(Math.random() * 16)),
@@ -504,6 +605,8 @@ describe("scanOutgoing secrets", () => {
 			"secret-assignment",
 			"cookie-header",
 			"docker-auth",
+			"cli-credentials",
+			"webhook-url",
 			"env-value",
 		]);
 	});

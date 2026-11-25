@@ -65,6 +65,7 @@ const PATTERN_RULES: readonly PatternRule[] = [
 			/\bhf_[A-Za-z0-9]{30,}/,
 			/\bdop_v1_[A-Za-z0-9]{20,}/,
 			/\bshp(?:at|ca|pa|ss)_[A-Za-z0-9]{20,}/,
+			/\bya29\.[A-Za-z0-9_-]{30,}/,
 		],
 	},
 	{
@@ -96,6 +97,24 @@ const PATTERN_RULES: readonly PatternRule[] = [
 		],
 	},
 	{ name: "docker-auth", patterns: [/"auth"\s*:\s*"[A-Za-z0-9+/=]{16,}"/] },
+	{
+		name: "cli-credentials",
+		patterns: [
+			/\bcurl\b[^\n]{0,200}?\s(?:-u|--user|--proxy-user)[ =]?['"]?[^\s:'"]+:[^\s'"]{6,}/,
+			/\bsshpass\s+-p\s*\S{6,}/,
+			/(?:^|\s)--(?:password|passwd|pass|token|secret|api-key|apikey|access-key|secret-key)(?:=|\s+)(?!-)\S{8,}/i,
+			/\bmysql\b[^\n]{0,100}?\s-p\S{8,}/,
+			/\baws\s+configure\s+set\s+\S*(?:secret|token|key)\S*\s+\S{12,}/i,
+		],
+	},
+	{
+		name: "webhook-url",
+		patterns: [
+			/hooks\.slack\.com\/(?:services|workflows)\/[A-Za-z0-9/_-]{20,}/,
+			/discord(?:app)?\.com\/api\/webhooks\/[0-9]{10,}\/[A-Za-z0-9_-]{30,}/,
+			/webhook\.office\.com\/webhookb2\/[A-Za-z0-9@./-]{30,}/,
+		],
+	},
 ];
 
 const ENV_VALUE_RULE = "env-value";
