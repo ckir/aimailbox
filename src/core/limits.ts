@@ -26,4 +26,8 @@ export const LIMITS = {
 	unknownFormatListed: 10,
 	queryWords: 8,
 	notReproducedThreshold: 3, // spec 12.4
+	scanEnvSecretNamedMinChars: 8, // [PROPOSED, UNMEASURED] shortest value of a secret-named variable the scanner looks for
+	scanEnvEntropyMinChars: 20, // [PROPOSED, UNMEASURED] shortest value the scanner judges by entropy alone
+	scanEntropyBitsPerChar: 3.5, // [PROPOSED, UNMEASURED] Shannon entropy per character at or above which a value counts as random
+	scanContextNameMinChars: 3, // [PROPOSED, UNMEASURED] shortest user, host, branch or package name the scanner looks for
 } as const;
