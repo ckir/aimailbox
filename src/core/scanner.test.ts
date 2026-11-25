@@ -443,6 +443,18 @@ describe("scanOutgoing secrets", () => {
 		}
 	});
 
+	test("cookie-header stays linear on repeated header names and still reaches a pair 1500 characters in (R37)", () => {
+		const started = performance.now();
+		scanOutgoing("cookie:".repeat(20000), EMPTY);
+		expect(performance.now() - started).toBeLessThan(1000);
+		const hex = Array.from({ length: 32 }, () =>
+			"0123456789abcdef".charAt(Math.floor(Math.random() * 16)),
+		).join("");
+		expect<unknown>(
+			scanOutgoing(`Cookie: ${"a=b; ".repeat(300)}session=${hex}`, EMPTY),
+		).toEqual({ outcome: "secret", rules: ["cookie-header"] });
+	});
+
 	test("ordinary technical text stays clean", () => {
 		const sha = Array.from({ length: 40 }, () =>
 			"0123456789abcdef".charAt(Math.floor(Math.random() * 16)),

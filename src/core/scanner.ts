@@ -92,7 +92,7 @@ const PATTERN_RULES: readonly PatternRule[] = [
 	{
 		name: "cookie-header",
 		patterns: [
-			/(?:^|[^a-z])(?:set-)?cookie\s*:[^\n]*?(?<![A-Za-z0-9_.~%-])(?!(?:path|domain|expires|max-age|samesite|secure|httponly|priority|version|comment)\s*=)[A-Za-z0-9_.~%-]+=[^\s;]{16,}/i,
+			/(?:^|[^a-z])(?:set-)?cookie\s*:[^\n]{0,2000}?(?<![A-Za-z0-9_.~%-])(?!(?:path|domain|expires|max-age|samesite|secure|httponly|priority|version|comment)\s*=)[A-Za-z0-9_.~%-]+=[^\s;]{16,}/i,
 		],
 	},
 	{ name: "docker-auth", patterns: [/"auth"\s*:\s*"[A-Za-z0-9+/=]{16,}"/] },
