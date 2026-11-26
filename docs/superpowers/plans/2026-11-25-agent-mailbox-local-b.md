@@ -164,6 +164,40 @@ saved on this machine as L7 (local only: veto); it is shown only for lookups mad
 
 `no such draft: <id> (drafts are kept 24 hours; draft again)` and `the draft <id> is damaged; draft again` (exit 1). When `shellQuote` gives `undefined` the last line is replaced by `the directory name has characters that cannot be shown safely, so no command is offered; the human can add the rule by editing the policy file`. A policy file that does not parse adds the line `the policy file could not be read, so the default (deny) applied: <error name>`. `policy allow` outside a terminal prints `policy allow needs a human at an interactive terminal; it was not run.` and exits 1. After a successful `policy allow` it prints `rule added: <showPath(directory)> allow` and `effective mode for <showPath(directory)>: <mode>` (a stricter matching rule still wins, so the mode may not be allow); for `/` or the home directory it first prints `warning: this rule covers every directory under it`.
 
+`status`:
+
+```
+aimailbox status (local only; not connected)
+store: <showPath(store path)> (format 1)
+policy: <showPath(policy path)> (default deny | <n> rules)[; problem: <PolicyProblem>, so the default applies]
+this directory: <showPath(call directory)>; workspace: <showPath(workspace directory)>
+decision here: <mode>[, vetoed]
+notes on this machine: <p> pending, <l> local only; drafts waiting: <d>
+[skipped rows: <n>]
+```
+
+`policy show`:
+
+```
+policy file: <showPath(path)>[ (problem: <PolicyProblem>; the default applies)]
+default mode: <mode>; unattended post-read sends: yes|no
+rules:
+  directory <showPath(directory)>: <mode>
+  remote <host/path>: <mode>
+[(no rules)]
+this directory <showPath(call directory)>: <mode>; veto: yes|no
+```
+
+`read L3`:
+
+```
+L3 <box> <kind> (<status label>)
+<the note re-serialised by fixedBytes, ending in a line feed>
+end of L3
+```
+
+`PolicyProblem` names are the three of `PolicyError` plus `too-long` (file over `LIMITS.policyFileBytes`) and `not-json`.
+
 ## File structure
 
 | File                                                       | Responsibility                                                                                                                                                                                                                 |
@@ -211,7 +245,7 @@ saved on this machine as L7 (local only: veto); it is shown only for lookups mad
 
 - Consumes `LIMITS.storeBusyMs`, `LIMITS.draftKeepMs`; `isCanonical`.
 - Produces `openStore(path: string, seam: Seam): Promise<Result<Store, "newer-format" | "unreadable">>` (creates the directory with mode 0700 and an empty file with mode 0600 through the seam when it is missing, then opens it with `bun:sqlite`; an empty file is a valid empty database).
-- Produces the `Store` methods: `putDraft(d: DraftRow): void` (idempotent on `draftId`), `getDraft(id: string, now: number): DraftRow | undefined` (a draft older than `draftKeepMs` is deleted and not returned), `takeDraft(id: string, note: Omit<NoteRow, "localId">): NoteRow | undefined` (one transaction: deletes the draft, inserts the note, returns it; `undefined` if the draft is gone), `putNote(note: Omit<NoteRow, "localId">): NoteRow`, `getNote(localId: number): NoteRow | undefined`, `notesForBox(box: string): NoteRow[]` (newest first), `boxes(): string[]`, `counts(): { pending: number; localOnly: number; drafts: number }`, `formatVersion: 1`.
+- Produces the `Store` methods: `putDraft(d: DraftRow): void` (idempotent on `draftId`), `getDraft(id: string, now: number): DraftRow | undefined` (a draft older than `draftKeepMs` is deleted and not returned), `takeDraft(id: string, note: Omit<NoteRow, "localId">): NoteRow | undefined` (one transaction: deletes the draft, inserts the note, returns it; `undefined` if the draft is gone), `putNote(note: Omit<NoteRow, "localId">): NoteRow`, `deleteDraft(id: string): void`, `skipped(): number` (rows the last list call dropped as invalid), `getNote(localId: number): NoteRow | undefined`, `notesForBox(box: string): NoteRow[]` (newest first), `boxes(): string[]`, `counts(): { pending: number; localOnly: number; drafts: number }`, `formatVersion: 1`.
 - Types: `DraftRow = { draftId; box; kind; bytes; workspaceDir; callDir; remotes: string[]; createdAt }`; `NoteRow = { localId; box; kind; bytes; status: "published" | "pending" | "local-only"; reason: "not-connected" | "policy" | "needs-human" | "context" | "veto"; provenance: "pre-read"; workspaceDir; callDir; remotes: string[]; createdAt; formatVersion: 1 }`.
 - Every statement is prepared with bound parameters; no SQL text is built from a value. `putDraft` of an existing id keeps the row and sets its `created_at` to the new time (a re-draft gets a fresh 24 hours).
 - Schema (user_version 1): `drafts(draft_id TEXT PRIMARY KEY, box TEXT NOT NULL, kind TEXT NOT NULL, bytes TEXT NOT NULL, workspace_dir TEXT NOT NULL, call_dir TEXT NOT NULL, remotes_json TEXT NOT NULL, created_at INTEGER NOT NULL)` and `notes(local_id INTEGER PRIMARY KEY AUTOINCREMENT, box TEXT NOT NULL, kind TEXT NOT NULL, bytes TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('published','pending','local-only')), reason TEXT NOT NULL CHECK (reason IN ('not-connected','policy','needs-human','context','veto')), provenance TEXT NOT NULL CHECK (provenance IN ('pre-read')), workspace_dir TEXT NOT NULL, call_dir TEXT NOT NULL, remotes_json TEXT NOT NULL, created_at INTEGER NOT NULL, format_version INTEGER NOT NULL DEFAULT 1)`. `status` has `published` and `provenance` is one value because later plans need them; the CHECK lists change by a migration then.
@@ -258,9 +292,9 @@ saved on this machine as L7 (local only: veto); it is shown only for lookups mad
 **Interfaces:**
 
 - Consumes `readPolicy`, `resolvePolicy`, `policyPermission`, `DEFAULT_POLICY`, `Policy`, `Resolution`, `Workspace`, `policyPath`, `resolvePath`, `Seam`.
-- Produces `loadPolicy(seam): Promise<{ policy: Policy; problem?: string }>` (a missing file gives `DEFAULT_POLICY`; a file over `LIMITS.policyFileBytes`, not JSON, or refused by `readPolicy` gives `DEFAULT_POLICY` and `problem` set to the error name; every `directory` rule is passed through `resolvePath` before `resolvePolicy` sees it, and a `remote` rule is left as stored).
+- Produces `type PolicyProblem = PolicyError | "too-long" | "not-json"` and `loadPolicy(seam): Promise<{ policy: Policy; problem?: PolicyProblem }>` (a missing file gives `DEFAULT_POLICY`; a file over `LIMITS.policyFileBytes`, not JSON, or refused by `readPolicy` gives `DEFAULT_POLICY` and `problem` set to the error name; every `directory` rule is passed through `resolvePath` before `resolvePolicy` sees it, and a `remote` rule is left as stored).
 - Produces `isVetoed(seam, ws): Promise<boolean>` (the file `.aimailbox-veto` exists in `ws.workspaceDir`; any kind of entry counts).
-- Produces `decide(seam, ws): Promise<{ resolution: Resolution; permission: Permission; problem?: string }>` with `Permission` from core.
+- Produces `type Decision = { resolution: Resolution; permission: Permission; problem?: PolicyProblem }`, `decide(seam, ws: Pick<Workspace, "callDir" | "workspaceDir" | "rawRemotes">): Promise<Decision>` (a draft's recorded origin is passed as such a value, its stored canonical remotes standing for raw ones: `canonicalRemote` accepts `host/path`) and `stricter(a: Decision, b: Decision): Decision` (the more restrictive mode, `vetoed` if either, `unattendedPostRead` only if both, permission recomputed with `policyPermission`).
 - Produces `allowDirectory(seam, directory: string): Promise<CommandResult>` and `showPolicy(seam, ws): Promise<CommandResult>`.
 
 - [ ] **Step 1: Write the failing tests:**
@@ -285,11 +319,11 @@ saved on this machine as L7 (local only: veto); it is shown only for lookups mad
 **Interfaces:**
 
 - Consumes `prepareDraft`, `TEXT_FIELD_ORDER`, `scanOutgoing`, `applyFixes`, `isMechanical`, `canonicalise`, `Store`, `workspaceFacts`, `scanContext`, `NoteContent`.
-- Produces `fixedBytes(content: NoteContent): string` (JSON with two-space indent, keys in the order `formatVersion, kind, summary, version, failureSignature, whatWasDone, whatHappened, whatWasExpected, workaround, freeText`, absent keys omitted, `parentNoteNumber` last, then one line feed) and `draftId(box: string, bytes: string): string` (the first 16 hex characters of the SHA-256 of `box + "\n" + bytes`).
+- Produces `fixedBytes(content: NoteContent): string` (JSON with two-space indent, keys in the order `formatVersion, kind, summary, version, failureSignature, whatWasDone, whatHappened, whatWasExpected, workaround, freeText`, absent keys omitted, `parentNoteNumber` last, then one line feed) and `draftId(box: string, bytes: string, workspaceDir: string): string` (the first 16 hex characters of the SHA-256 of `box + "\n" + bytes + "\n" + workspaceDir`, so one text drafted in two workspaces is two drafts and neither overwrites the other's recorded origin).
 - Produces `runDraft(seam, store, args: { box: string; kind: string; file?: string; redact: boolean }): Promise<CommandResult>`.
 
 - [ ] **Step 1: Write the failing tests** (`fixed.test.ts`, `draft.test.ts`):
-  - `fixedBytes` of one content is the same string whatever the order of the input keys; it ends in one line feed; `draftId` differs when the box differs or one byte differs, and is 16 lowercase hex characters.
+  - `fixedBytes` of one content is the same string whatever the order of the input keys; it ends in one line feed; `draftId` differs when the box, one byte or the workspace directory differs, and is 16 lowercase hex characters.
   - a JSON input that carries a `kind` or `formatVersion` key exits 2 with `invalid draft: unknown-field` (the client sets both).
   - arguments: an unknown kind or `reply` exits 2 with `kind must be problem or question`; a box that `canonicalise` refuses exits 2 with `not a box address: <the error name>` (the raw argument is not echoed); an empty standard input prints the fields text of the Surface and exits 2; input over `LIMITS.draftInputBytes` exits 2 with `draft input is over <n> bytes`; input that is not a JSON object exits 2; a JSON object with an unknown field, a missing required field or an over-long field exits 2 with `invalid draft: <NoteError name>` (nothing trimmed).
   - forbidden characters in a field are removed (7.1 first rule: `prepareDraft`) and the removal is mentioned on one line (`removed forbidden characters from: summary`).
@@ -315,12 +349,13 @@ saved on this machine as L7 (local only: veto); it is shown only for lookups mad
 
 - [ ] **Step 1: Write the failing tests:**
   - an unknown or expired id: `no such draft: <id> (drafts are kept 24 hours; draft again)`, exit 1; an id that is not 16 lowercase hex characters exits 2 and is not echoed.
-  - a draft whose stored bytes were changed in the database: the id no longer matches `draftId(box, bytes)`; the text is `the draft <id> is damaged; draft again`, exit 1, and the draft row is deleted.
+  - a draft whose stored bytes were changed in the database: the id no longer matches `draftId(box, bytes, workspaceDir)`; the text is `the draft <id> is damaged; draft again`, exit 1, and the draft row is deleted.
   - policy allow (a rule or a default of `allow`): `saved: L<n> (pending: not connected) ...`, exit 0, a note row `pending / not-connected / pre-read` with the draft's workspace, call directory and remotes (the ones recorded at draft time), and the draft row is gone.
   - the policy is read at send time: drafted under `allow`, then the file changed to `deny` before `send`: the outcome is the deny text, the note is `pending / policy`, and the text carries `aimailbox policy allow <resolved directory>`.
   - `confirm-each`: the needs-the-human text, `pending / needs-human`.
   - veto: the veto text, `local-only / veto`; veto wins over `allow`.
-  - the decision uses the call directory and remotes of the send call, but the note records the draft's workspace; a test drafts in one directory and sends from another (the policy of the sending directory applies; spec 9.6 for stored items is plan 5's).
+  - the decision is the stricter of two: the send call's (its call directory, remotes and working tree) and the draft's origin (its recorded call directory, remotes and workspace directory): the mode is the more restrictive, a veto at either is a veto, and unattended is off if either withholds it (8.4: a veto switches off every outgoing item from that repository). A test drafts in a repository that has `.aimailbox-veto`, changes to a directory outside it and sends: the veto text, `local-only / veto`. A test drafts under a `deny` rule for the origin and sends from a directory with an `allow` rule: deny. A test whose origin workspace directory no longer exists (removed after the draft) and whose send directory allows: `confirm-each` at most, so the needs-the-human text (9.6 rule 4: no policy can be established for a vanished workspace).
+  - exit codes: saved pending for `not connected` exits 0; every outcome in which the policy, the human or the veto holds the note back exits 1; a damaged or unknown draft exits 1; a secret found on the re-scan exits 1.
   - re-scan at send: a draft whose stored bytes now contain a secret (the test edits them and fixes the id) is refused as a secret, deleted, nothing stored.
   - a policy file that does not parse: deny, plus the `the policy file could not be read ...` line.
   - two sends of one id (the second awaited after the first): the second prints `no such draft` and there is one note (the first send's note).
@@ -335,7 +370,7 @@ saved on this machine as L7 (local only: veto); it is shown only for lookups mad
 
 **Interfaces:**
 
-- Consumes `Store`, `detectInstalled`, `WorkspaceFile`, `canonicalise`, `isCanonical`, `ecosystemOf`, `cleanText`, `LIMITS`, `Workspace`.
+- Consumes `Store`, `workspaceFacts`, `detectInstalled`, `WorkspaceFile`, `canonicalise`, `isCanonical`, `ecosystemOf`, `cleanText`, `fixedBytes`, `decide`, `LIMITS`, `Workspace`.
 - Produces `readWorkspaceFiles(seam, ws): Promise<WorkspaceFile[]>` (each of `package-lock.json`, `Cargo.lock`, `go.mod` read from `ws.workspaceDir`, capped at `LIMITS.lockFileBytes`; a missing or over-long file is left out).
 - Produces `runLookup(seam, store, args: { target: string; installed?: string; group: number }): Promise<CommandResult>`, `runRead(seam, store, localId: string): Promise<CommandResult>`, `runStatus(seam, store): Promise<CommandResult>`.
 
