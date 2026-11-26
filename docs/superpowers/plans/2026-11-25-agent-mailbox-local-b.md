@@ -23,7 +23,7 @@ Deferred by this plan, recorded for the owner's review: section 14 names `lookup
 - The store is one SQLite file with the default rollback journal and a busy timeout, not WAL (the SQLite documentation says WAL does not work over a network file system) and not JSON files.
 - The repository veto file is `.aimailbox-veto`, at the root of the working tree; its existence is the veto.
 
-**What exists now (verified 2026-11-25 on `main` at `24230d3`):** `src/core/` holds the modules of plans 1 and 2a. This plan uses these exports and no others from it: `canonicalise`, `isCanonical`, `ecosystemOf` (`address.ts`); `readPolicy`, `resolvePolicy`, `policyPermission`, `canonicalRemote`, `DEFAULT_POLICY`, and the types `Policy`, `PolicyEntry`, `Call`, `Resolution` (`policy.ts`); `scanOutgoing`, `applyFixes`, `isMechanical` and the types `ScanContext`, `ScanOutcome`, `ContextFinding` (`scanner.ts`); `prepareDraft`, `TEXT_FIELD_ORDER`, `cleanText` and the types `NoteContent`, `NoteError` (`note.ts`); `detectInstalled` and the type `WorkspaceFile` (`detect.ts`); `LIMITS` (`limits.ts`); `Result` (`result.ts`); `stripForbidden`, `utf8Length` (`text.ts`). `src/client/` does not exist. `src/index.ts` is a placeholder and stays.
+**What exists now (verified 2026-11-25 on `main` at `24230d3`):** `src/core/` holds the modules of plans 1 and 2a. This plan uses these exports and no others from it: `canonicalise`, `isCanonical`, `ecosystemOf` (`address.ts`); `readPolicy`, `resolvePolicy`, `policyPermission`, `canonicalRemote`, `DEFAULT_POLICY`, and the types `Policy`, `PolicyEntry`, `PolicyError`, `Call`, `Resolution`, `Permission` (`policy.ts`); `scanOutgoing`, `applyFixes`, `isMechanical` and the types `ScanContext`, `ScanOutcome`, `ContextFinding` (`scanner.ts`); `prepareDraft`, `TEXT_FIELD_ORDER`, `cleanText` and the types `NoteContent`, `NoteError` (`note.ts`); `detectInstalled` and the type `WorkspaceFile` (`detect.ts`); `LIMITS` (`limits.ts`); `Result` (`result.ts`); `stripForbidden`, `utf8Length` (`text.ts`). `src/client/` does not exist. `src/index.ts` is a placeholder and stays.
 
 ## Global Constraints
 
@@ -156,7 +156,7 @@ so that later sends from here are accepted, the human can run, at an interactive
 ```
 
 ```
-not sent: the policy asks the human to confirm every item from <resolved directory>, and this client version cannot ask yet.
+not sent: the policy asks the human to confirm every item from <showPath(resolved directory)>, and this client version cannot ask yet.
 saved on this machine as L7 (pending: needs the human). This client version cannot publish or ask; the note waits on this machine.
 ```
 
@@ -297,7 +297,7 @@ end of L3
 
 **Interfaces:**
 
-- Consumes `readPolicy`, `resolvePolicy`, `policyPermission`, `DEFAULT_POLICY`, `Policy`, `Resolution`, `Workspace`, `policyPath`, `resolvePath`, `Seam`.
+- Consumes `readPolicy`, `resolvePolicy`, `policyPermission`, `DEFAULT_POLICY`, `Policy`, `PolicyError`, `Resolution`, `Permission`, `Workspace`, `policyPath`, `resolvePath`, `Seam`.
 - Produces `type PolicyProblem = PolicyError | "too-long" | "not-json"` and `loadPolicy(seam): Promise<{ policy: Policy; problem?: PolicyProblem }>` (a missing file gives `DEFAULT_POLICY`; a file over `LIMITS.policyFileBytes`, not JSON, or refused by `readPolicy` gives `DEFAULT_POLICY` and `problem` set to the error name; every `directory` rule is passed through `resolvePath` before `resolvePolicy` sees it, and a `remote` rule is left as stored).
 - Produces `isVetoed(seam, ws): Promise<boolean>` (the file `.aimailbox-veto` exists in `ws.workspaceDir`; any kind of entry counts).
 - Produces `type Decision = { resolution: Resolution; permission: Permission; problem?: PolicyProblem }`, `decide(seam, ws: Pick<Workspace, "callDir" | "workspaceDir" | "rawRemotes">): Promise<Decision>` (a draft's recorded origin is passed as such a value, its stored canonical remotes standing for raw ones: `canonicalRemote` accepts `host/path`) and `stricter(a: Decision, b: Decision): Decision` (the more restrictive mode, `vetoed` if either, `unattendedPostRead` only if both, permission recomputed with `policyPermission(resolution, "other")`, whose second parameter is `"retraction" | "other"`).
@@ -357,12 +357,12 @@ end of L3
   - an unknown or expired id: `no such draft: <id> (drafts are kept 24 hours; draft again)`, exit 1; an id that is not 16 lowercase hex characters exits 2 and is not echoed.
   - a draft whose stored bytes were changed in the database: the id no longer matches `draftId(box, bytes, callDir, workspaceDir)`; the text is `the draft <id> is damaged; draft again`, exit 1, and the draft row is deleted.
   - policy allow (a rule or a default of `allow`): `saved: L<n> (pending: not connected) ...`, exit 0, a note row `pending / not-connected / pre-read` with the draft's workspace, call directory and remotes (the ones recorded at draft time), and the draft row is gone.
-  - the policy is read at send time: drafted under `allow`, then the file changed to `deny` before `send`: the outcome is the deny text, the note is `pending / policy`, and the text carries `aimailbox policy allow <resolved directory>`.
+  - the policy is read at send time: drafted under `allow`, then the file changed to `deny` before `send`: the outcome is the deny text, the note is `pending / policy`, and the text carries `aimailbox policy allow <shellQuote(resolved directory)>`.
   - `confirm-each`: the needs-the-human text, `pending / needs-human`.
   - veto: the veto text, `local-only / veto`; veto wins over `allow`.
   - the decision is the stricter of two: the send call's (its call directory, remotes and working tree) and the draft's origin (its recorded call directory, remotes and workspace directory): the mode is the more restrictive, a veto at either is a veto, and unattended is off if either withholds it (8.4: a veto switches off every outgoing item from that repository). A test drafts in a repository that has `.aimailbox-veto`, changes to a directory outside it and sends: the veto text, `local-only / veto`. A test drafts under a `deny` rule for the origin and sends from a directory with an `allow` rule: deny. A test whose origin workspace directory no longer exists (removed after the draft) and whose send directory allows: the needs-the-human text (9.6 rule 4: no policy can be established for a vanished workspace); with a `deny` rule for the send directory it stays the deny text (the clamp only turns `allow` into `confirm-each` and switches `unattendedPostRead` off; it never loosens).
   - exit codes: saved pending for `not connected` exits 0; every outcome in which the policy, the human or the veto holds the note back exits 1; a damaged or unknown draft exits 1; a secret found on the re-scan exits 1.
-  - re-scan at send: a draft whose stored bytes now contain a secret (the test edits them and fixes the id) is refused as a secret, deleted, nothing stored.
+  - re-scan at send: a draft whose stored bytes now contain a secret (the test edits them and fixes the id) is refused with the template `refused: the stored draft now matches a secret rule (rule: <name>). The draft was deleted; nothing was stored or sent.` (exit 1), the draft row is deleted and no note is stored.
   - a policy file that does not parse: deny, plus the `the policy file could not be read ...` line.
   - two sends of one id (the second awaited after the first): the second prints `no such draft` and there is one note (the first send's note).
 - [ ] **Step 2: Run**; expect FAIL.
@@ -430,5 +430,6 @@ Adversarial panel, round 1 (the driver's solo pass, then the agy peer, 2026-11-2
 
 - `REJECTED`: that package names read from a repository's `package.json` let a hostile repository deny the sender's drafts (a name such as "the" holds every draft that contains the word). The consequence is not new: spec 8.4 already lets the same repository switch off every outgoing item with a committed veto file, and a held-back draft is saved locally under 9.6 rule 3, so nothing leaks and nothing is lost. The scanner already ignores names under `LIMITS.scanContextNameMinChars`.
 - `REJECTED`: that the structural tests of the rule text (line count, line width, forbidden words) are vacuous beside the exact-text pin. The pin changes together with a deliberate edit of the rule and then passes whatever the edit says; the structural tests are what fail when that edit breaks the spec's 5 to 8 lines or reintroduces a claim of safety. The mutant that proves it is in Task 8: change the literal and the pin to nine lines, and the line-count test fails.
+- `REJECTED` (round 6): that the plan names a field `replyTo`. The plan contains no such word (a search of the file for `replyTo` finds nothing); the field of a reply is `parentNoteNumber` in `src/core/note.ts` and the plan only says that `reply` is not a kind 2b drafts.
 
 End of plan 2b, the client's state and flows over local notes.
