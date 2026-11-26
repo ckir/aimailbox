@@ -417,3 +417,10 @@ After Task 8: `just check`. Then the standing disciplines apply, as for plan 2a:
 - Where `package.json` and `Cargo.toml` private names are read from is a heuristic; `go.mod` modules are not read as private names.
 - `policy allow`'s terminal check stops a headless agent only; spec 8.4 and 8.5 already state that an agent running as the same user can edit the policy file.
 - The `Seam` is wider than 2b strictly needs (`readStdin`, `os.addresses`) because plan 5's hook entry point and plan 2c's setup reuse it; Task 1 keeps it to what Tasks 2 to 8 call, and a method nothing calls is removed at the final review.
+
+## Stand-downs
+
+Adversarial panel, round 1 (the driver's solo pass, then the agy peer, 2026-11-26). Findings folded are in the plan text above; these two were not:
+
+- `REJECTED`: that package names read from a repository's `package.json` let a hostile repository deny the sender's drafts (a name such as "the" holds every draft that contains the word). The consequence is not new: spec 8.4 already lets the same repository switch off every outgoing item with a committed veto file, and a held-back draft is saved locally under 9.6 rule 3, so nothing leaks and nothing is lost. The scanner already ignores names under `LIMITS.scanContextNameMinChars`.
+- `REJECTED`: that the structural tests of the rule text (line count, line width, forbidden words) are vacuous beside the exact-text pin. The pin changes together with a deliberate edit of the rule and then passes whatever the edit says; the structural tests are what fail when that edit breaks the spec's 5 to 8 lines or reintroduces a claim of safety. The mutant that proves it is in Task 8: change the literal and the pin to nine lines, and the line-count test fails.
