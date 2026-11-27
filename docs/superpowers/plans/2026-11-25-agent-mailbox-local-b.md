@@ -115,7 +115,7 @@ This note will be public and dedicated to the public domain (CC0 1.0).
 exact bytes (send stores exactly these):
 <the fixed bytes, ending in a line feed>
 this machine's notes in this box:
-  L2 problem | ...   [or: (none)]
+  L2 problem | ...   [with no notes the one line: `  (none)`, two spaces first]
 mailbox matches: none (this client is not connected)
 next: aimailbox send 3f9a1c0b7d2e4a68
 ```
@@ -123,7 +123,7 @@ next: aimailbox send 3f9a1c0b7d2e4a68
 `draft`, mechanical context only, without `--redact` (nothing saved):
 
 ```
-held back: this draft names local context (home-dir, work-dir); nothing was sent or saved.
+held back: this draft names local context (<context kinds, each once, sorted, joined by ", ">); nothing was sent or saved.
 a fixed redaction replaces a home directory with "~" and a working directory with "<workspace>".
 to accept it, run the same draft command again with --redact
 ```
@@ -131,7 +131,7 @@ to accept it, run the same draft command again with --redact
 `draft`, context that cannot be redacted (saved as written, local only; never publishable as it is, 9.6 rule 3):
 
 ```
-held back: this draft names local context that cannot be redacted (private-remote, user-name).
+held back: this draft names local context that cannot be redacted (<context kinds, each once, sorted, joined by ", ">).
 saved on this machine only, as L5 (local only: context). It is shown only for lookups made from this workspace and can never be published as it is.
 to share the idea, draft it again without that text.
 ```
@@ -139,7 +139,7 @@ to share the idea, draft it again without that text.
 `draft`, secret (nothing saved, 8.1):
 
 ```
-refused: the draft contains a secret (rule: secret-assignment). Nothing was saved and nothing was sent.
+refused: the draft contains a secret (rule: <rule names, sorted, joined by ", ">). Nothing was saved and nothing was sent.
 remove it and draft again; if it is a real credential, rotate it.
 ```
 
@@ -150,19 +150,23 @@ saved: L7 (pending: not connected). Nothing was published; this client version h
 ```
 
 ```
-not sent: the policy denies sending from <showPath(resolved directory)> (<mode>).
+not sent: the policy denies sending from <showPath(decision directory)> (<mode>).
 saved on this machine as L7 (pending: policy), in its fixed form. This client version cannot publish; the note waits on this machine.
 so that later sends from here are accepted, the human can run, at an interactive terminal (an agent must not run this): aimailbox policy allow <shellQuote(resolved directory)>
 ```
 
 ```
-not sent: the policy asks the human to confirm every item from <showPath(resolved directory)>, and this client version cannot ask yet.
+not sent: the policy asks the human to confirm every item from <showPath(decision directory)>, and this client version cannot ask yet.
 saved on this machine as L7 (pending: needs the human). This client version cannot publish or ask; the note waits on this machine.
 ```
 
 ```
+not sent: the directory this draft was written in (<showPath(origin workspace directory)>) no longer exists, so no policy can be established for it; the human must confirm.
+saved on this machine as L7 (pending: needs the human). This client version cannot publish or ask; the note waits on this machine.
+```
 not sent: this repository has a veto file (.aimailbox-veto), which switches off sending.
 saved on this machine as L7 (local only: veto); it is shown only for lookups made from this repository.
+
 ```
 
 `no such draft: <id> (drafts are kept 24 hours; draft again)` and `the draft <id> is damaged; draft again` (exit 1). When `shellQuote` gives `undefined` the last line is replaced by `the directory name has characters that cannot be shown safely, so no command is offered; the human can add the rule by editing the policy file`. A policy file that does not parse adds the line `the policy file could not be read, so the default (deny) applied: <error name>`. `policy allow` outside a terminal prints `policy allow needs a human at an interactive terminal; it was not run.` and exits 1. After a successful `policy allow` it prints `rule added: <showPath(directory)> allow` and `effective mode for <showPath(directory)>: <mode>` (a stricter matching rule still wins, so the mode may not be allow); for `/` or the home directory it first prints `warning: this rule covers every directory under it`.
@@ -177,6 +181,7 @@ this directory: <showPath(call directory)>; workspace: <showPath(workspace direc
 decision here: <mode>[, vetoed]
 notes on this machine: <p> pending, <l> local only; drafts waiting: <d>
 [skipped rows: <n>]
+
 ```
 
 `policy show`:
@@ -185,10 +190,11 @@ notes on this machine: <p> pending, <l> local only; drafts waiting: <d>
 policy file: <showPath(path)>[ (problem: <PolicyProblem>; the default applies)]
 default mode: <mode>; unattended post-read sends: yes|no
 rules:
-  directory <showPath(directory)>: <mode>
-  remote <host/path>: <mode>
+directory <showPath(directory)>: <mode>
+remote <host/path>: <mode>
 [(no rules)]
 this directory <showPath(call directory)>: <mode>; veto: yes|no
+
 ```
 
 `read L3`:
@@ -197,6 +203,7 @@ this directory <showPath(call directory)>: <mode>; veto: yes|no
 L3 <box> <kind> (<status label>)
 <the note re-serialised by fixedBytes, ending in a line feed>
 end of L3
+
 ```
 
 `PolicyProblem` names are the three of `PolicyError` plus `too-long` (file over `LIMITS.policyFileBytes`) and `not-json`.
@@ -300,7 +307,7 @@ end of L3
 - Consumes `readPolicy`, `resolvePolicy`, `policyPermission`, `DEFAULT_POLICY`, `Policy`, `PolicyError`, `Resolution`, `Permission`, `Workspace`, `policyPath`, `resolvePath`, `Seam`.
 - Produces `type PolicyProblem = PolicyError | "too-long" | "not-json"` and `loadPolicy(seam): Promise<{ policy: Policy; problem?: PolicyProblem }>` (a missing file gives `DEFAULT_POLICY`; a file over `LIMITS.policyFileBytes`, not JSON, or refused by `readPolicy` gives `DEFAULT_POLICY` and `problem` set to the error name; every `directory` rule is passed through `resolvePath` before `resolvePolicy` sees it, and a `remote` rule is left as stored).
 - Produces `isVetoed(seam, ws): Promise<boolean>` (the file `.aimailbox-veto` exists in `ws.workspaceDir`; any kind of entry counts).
-- Produces `type Decision = { resolution: Resolution; permission: Permission; problem?: PolicyProblem }`, `decide(seam, ws: Pick<Workspace, "callDir" | "workspaceDir" | "rawRemotes">): Promise<Decision>` (a draft's recorded origin is passed as such a value, its stored canonical remotes standing for raw ones: `canonicalRemote` accepts `host/path`) and `stricter(a: Decision, b: Decision): Decision` (the more restrictive mode, `vetoed` if either, `unattendedPostRead` only if both, permission recomputed with `policyPermission(resolution, "other")`, whose second parameter is `"retraction" | "other"`).
+- Produces `type Decision = { resolution: Resolution; permission: Permission; problem?: PolicyProblem; directory: string }` (`directory` is the resolved call directory the decision was taken for: the text of a deny or a confirm-each prints it as `decision directory`, and the allow command is built for it), `decide(seam, ws: Pick<Workspace, "callDir" | "workspaceDir" | "rawRemotes">): Promise<Decision>` (a draft's recorded origin is passed as such a value, its stored canonical remotes standing for raw ones: `canonicalRemote` accepts `host/path`) and `stricter(a: Decision, b: Decision): Decision` (the more restrictive mode, with the `directory` of the decision that supplied it, `a` on a tie, `vetoed` if either, `unattendedPostRead` only if both, permission recomputed with `policyPermission(resolution, "other")`, whose second parameter is `"retraction" | "other"`).
 - Produces `allowDirectory(seam, directory: string): Promise<CommandResult>` and `showPolicy(seam, ws): Promise<CommandResult>`.
 
 - [ ] **Step 1: Write the failing tests:**
@@ -360,7 +367,7 @@ end of L3
   - the policy is read at send time: drafted under `allow`, then the file changed to `deny` before `send`: the outcome is the deny text, the note is `pending / policy`, and the text carries `aimailbox policy allow <shellQuote(resolved directory)>`.
   - `confirm-each`: the needs-the-human text, `pending / needs-human`.
   - veto: the veto text, `local-only / veto`; veto wins over `allow`.
-  - the decision is the stricter of two: the send call's (its call directory, remotes and working tree) and the draft's origin (its recorded call directory, remotes and workspace directory): the mode is the more restrictive, a veto at either is a veto, and unattended is off if either withholds it (8.4: a veto switches off every outgoing item from that repository). A test drafts in a repository that has `.aimailbox-veto`, changes to a directory outside it and sends: the veto text, `local-only / veto`. A test drafts under a `deny` rule for the origin and sends from a directory with an `allow` rule: deny. A test whose origin workspace directory no longer exists (removed after the draft) and whose send directory allows: the needs-the-human text (9.6 rule 4: no policy can be established for a vanished workspace); with a `deny` rule for the send directory it stays the deny text (the clamp only turns `allow` into `confirm-each` and switches `unattendedPostRead` off; it never loosens).
+  - the decision is the stricter of two: the send call's (its call directory, remotes and working tree) and the draft's origin (its recorded call directory, remotes and workspace directory): the mode is the more restrictive, a veto at either is a veto, and unattended is off if either withholds it (8.4: a veto switches off every outgoing item from that repository). A test drafts in a repository that has `.aimailbox-veto`, changes to a directory outside it and sends: the veto text, `local-only / veto`. A test drafts under a `deny` rule for the origin and sends from a directory with an `allow` rule: deny. A test whose origin workspace directory no longer exists (removed after the draft) and whose send directory allows: the vanished-origin template (the third `not sent` text of the needs-the-human kind in the Surface section) (9.6 rule 4: no policy can be established for a vanished workspace); with a `deny` rule for the send directory it stays the deny text (the clamp only turns `allow` into `confirm-each` and switches `unattendedPostRead` off; it never loosens).
   - exit codes: saved pending for `not connected` exits 0; every outcome in which the policy, the human or the veto holds the note back exits 1; a damaged or unknown draft exits 1; a secret found on the re-scan exits 1.
   - re-scan at send: a draft whose stored bytes now contain a secret (the test edits them and fixes the id) is refused with the template `refused: the stored draft now matches a secret rule (rule: <name>). The draft was deleted; nothing was stored or sent.` (exit 1), the draft row is deleted and no note is stored.
   - a policy file that does not parse: deny, plus the `the policy file could not be read ...` line.
@@ -407,7 +414,7 @@ end of L3
   - rule: between 5 and 8 lines (`[PROPOSED, UNMEASURED]` 9.3), every line at most 120 characters, ASCII only, contains `aimailbox lookup` and `untrusted` and `next:`, contains none of `verified`, `safe`, `trusted` (as a whole word without `un`), `guaranteed`, and equals the five-line text of the Surface section of this plan, copied into the test as a literal (the test pins the text; changing the rule is a deliberate edit of both).
   - cli: each command's arguments parse as in the table; an unknown command, a missing argument, an unknown flag, a flag given twice and a flag missing its value each exit 2 with `usage:` and the command list (the unknown text is not echoed); `--file -` and no `--file` both mean standard input; `--group` and `--installed` take one value; `--redact` takes none.
   - cli: it opens the store once per run through `storePath(seam)`; a `newer-format` or `unreadable` store exits 3 for the commands that need it (`lookup`, `read`, `draft`, `send`, `status`) and does not stop `policy show` or `policy allow`.
-  - flow (`flow.test.ts`, a temporary directory with a real `git init`, a `package-lock.json` recording one version, a policy file, `testSeam`): `lookup` shows no notes; `draft` of a note with a home path prints the held-back text; `draft --redact` fixes it; `send` under default deny prints the policy text and stores `pending / policy`; `policy allow` (interactive) adds the rule; a new `draft` and `send` store `pending / not-connected`; `lookup` lists both notes with the right labels; `read` prints the second; a `.aimailbox-veto` file added to the working tree makes a further `send` print the veto text; `status` shows the counts; the seam is the only source of the environment, the clock, randomness and the file system: a separate test scans every `src/client/*.ts` except `seam-real.ts`, `main.ts`, `testing.ts` and the tests for `process.`, `Bun.spawn`, `node:fs`, `node:os`, `Date.now`, `Math.random` and `crypto.getRandomValues`, and fails on any hit.
+  - flow (`flow.test.ts`, a temporary directory with a real `git init`, a `package-lock.json` recording one version, a policy file, `testSeam` with a fixed clock and counting randomness, so every printed text is deterministic): the test runs this script and compares the WHOLE text and exit code of each step with a literal written out in the test (the Surface templates with the fixture's paths, ids and summary filled in; no substring checks): `lookup` on the empty store; `draft` of a note that names the home directory (held back, exit 1); `draft --redact` (ok, exit 0); `send` under default deny (the deny text, `L1 pending: policy`, exit 1); `policy allow` with the terminal flag on; a second `draft --redact` (its notes list shows `L1`) and `send` (`L2 pending: not connected`, exit 0); a `draft --redact` from a subdirectory followed by deleting the working tree and `send` (the vanished-origin text, `L3 pending: needs the human`, exit 1); `lookup` from a directory outside the working tree (the three notes, newest first, all visible); `read L1` and `read L3`; a `.aimailbox-veto` file added to a fresh working tree makes a further `send` print the veto text (`local-only: veto`); `status` with the counts. The seam is the only source of the environment, the clock, randomness and the file system: a separate test scans every `src/client/*.ts` except `seam-real.ts`, `main.ts`, `testing.ts` and the tests for `process.`, `Bun.spawn`, `node:fs`, `node:os`, `Date.now`, `Math.random` and `crypto.getRandomValues`, and fails on any hit.
 - [ ] **Step 2: Run**; expect FAIL.
 - [ ] **Step 3: Implement.** Argument parsing by hand (no dependency): the grammar is the table of commands; a value never starts a flag.
 - [ ] **Step 4: Run** `just check` (it includes the toolchain suite). Mutants: change one word of `ALWAYS_ON_RULE` (the equality test fails); change both the literal and the pinned copy to nine lines (the line-count test fails); remove the `try` of `runCli` (a test of `runCli` with a seam whose `now()` throws asserts the result `{ exit: 3 }` and fails).
@@ -433,3 +440,4 @@ Adversarial panel, round 1 (the driver's solo pass, then the agy peer, 2026-11-2
 - `REJECTED` (round 6): that the plan names a field `replyTo`. The plan contains no such word (a search of the file for `replyTo` finds nothing); the field of a reply is `parentNoteNumber` in `src/core/note.ts` and the plan only says that `reply` is not a kind 2b drafts.
 
 End of plan 2b, the client's state and flows over local notes.
+```
